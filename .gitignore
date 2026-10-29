@@ -1,0 +1,11 @@
+.venv/
+__pycache__/
+*.pyc
+data/
+outputs/
+*.ply
+*.las
+*.npz
+.env
+.DS_Store
+.ipynb_checkpoints/
