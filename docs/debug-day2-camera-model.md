@@ -91,6 +91,22 @@ outside that range. Scale values are not comparable between runs because SfM sca
 - Reconstructions are not bit-reproducible: two runs of the same configuration gave 9,458 and 9,484 points
   (and 7,145 and 7,162 for the fragment). Differences of about 0.3% in point count are noise.
 
+## 5b. Addendum (Day 5): the fisheye model was not the best fix
+
+Day 5's controller compared three camera models and preferred `OPENCV` (pinhole with radial and
+tangential distortion) over `OPENCV_FISHEYE`. Evaluated against the scan afterwards:
+
+| Camera model | ATE RMSE | Point median to scan | Within 2 / 5 cm | Mean reproj. |
+|---|---|---|---|---|
+| SIMPLE_RADIAL | 2.5 cm | 10.5 cm | 10 / 21% | 0.98 px |
+| OPENCV_FISHEYE | 1.1 cm | 1.35 cm | 82 / 98% | 0.45 px |
+| OPENCV | 0.74 cm | 0.84 cm | 95 / 98% | 0.42 px |
+
+So the cause stands (an inadequate distortion model), but the claim above that the *fisheye*
+model was the remedy is too narrow: the lens is a fisheye-type camera in the reference
+calibration, yet a richer pinhole-plus-distortion model fits this data better. The practical
+lesson is to compare several models, which is what the agent does.
+
 ## 6. Conclusion
 
 Lens-model mismatch distorted the reconstructed structure while the reprojection error stayed close to

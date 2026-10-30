@@ -38,7 +38,8 @@ def build_scene_graph(
     planes: list[Plane], scale: float = 1.0, unit: str = "units",
 ) -> dict:
     coords = points @ frame.axes
-    ext = coords.max(axis=0) - coords.min(axis=0)
+    # 0.5 / 99.5 percentiles: sparse reconstructions contain far outliers.
+    ext = np.percentile(coords, 99.5, axis=0) - np.percentile(coords, 0.5, axis=0)
     nodes, edges = [], []
 
     by_role = {p.name: p for p in planes}
