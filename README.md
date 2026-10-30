@@ -1,40 +1,64 @@
 # scene2twin
 
-Phone video in, measured and uncertainty-labeled 3D semantic map out.
+Turn photos of a room into a measured, uncertainty-labelled 3D map, and check the result against
+independent reference geometry instead of trusting a pretty visualisation.
 
-An agent orchestrates reconstruction, registration, semantic lifting and evaluation, checks its own results against reference measurements, and retries or switches methods when quality gates fail.
+The pipeline reconstructs a room with structure-from-motion, finds its floor, ceiling and walls,
+lifts 2D instance masks onto the 3D points, sets metric scale from tape measurements, and runs a
+set of quality gates that decide which camera model and which measurements to trust. It is
+evaluated against laser scans from the ETH3D benchmark.
 
-> Status: work in progress (private).
+> Status: research prototype. Several parts work, some did not, and both are documented below.
+> There is no web viewer yet.
 
-## What this project is
+## What works and what did not
 
-- A pipeline: video/images -> camera poses and dense geometry -> alignment to a metric frame -> semantic labels lifted to 3D -> scene graph.
-- An evaluation harness: every stage reports error against ground truth (laser scans, tape measurements), not just a visualization.
-- An agent layer: runs the stages as tools, inspects quality metrics, decides to retry or switch method, and writes a report separating **measured** structure from **predicted** structure.
+| Area | Outcome |
+|---|---|
+| Camera-model choice | A rule that compares candidate models picked `OPENCV` on both test scenes, and `OPENCV` was the most accurate against the laser scan both times (median point error 0.84 cm and 1.52 cm). A single reprojection-error threshold would have accepted a wrong model on one scene (0.98 px) |
+| Room structure | Floor, ceiling and wall planes and per-point labels with a confidence that tracks accuracy (92% agreement at confidence 0.8 to 1.0, 33% below 0.5, on one scene) |
+| Instance lifting | SAM masks lifted to 3D by cross-view voting; separates keyboards, bags and whiteboards. Produces some room-sized false merges, which a gate catches |
+| Registration to a laser scan | **Did not work.** FPFH+RANSAC, Open3D's scaled pipeline and a room-axes method all failed to place the reconstruction. The room-axes method recovers orientation, not translation or scale |
+| Floor-plausibility gate | **Failed validation.** It gave the same value for a wrong floor and a correct one |
+| Metric scale | Cross-checking two tape measurements caught a bad one on both scenes; the final scale was within 3% and 0.3% of the reference |
 
-## Authorship (what is mine vs. what is a library)
+Details, numbers and the bugs found along the way are in [`docs/`](docs/):
+[camera-model debug](docs/debug-day2-camera-model.md),
+[registration](docs/day3-registration.md),
+[semantics](docs/day4-semantics.md),
+[SAM lifting](docs/day4b-sam-lift.md),
+[controller and second scene](docs/day5-agent.md).
+
+Limits that apply to every number above: two scenes, one camera each, thresholds chosen after
+seeing the first scene, and no human-annotated semantics (the scan's own planes are the reference).
+
+## Authorship: what is written here and what is a library
 
 | Component | Source |
 |---|---|
-| Structure-from-Motion / MVS | COLMAP (library) |
-| 2D segmentation | SAM (pretrained model) |
-| Evaluation metrics (pose error, accuracy/completeness, reprojection stats) | written in this repo (`eval/`) |
-| Sim(3) alignment, coarse-to-fine registration, comparison against library defaults | written in this repo (`registration/`) |
-| 2D-to-3D semantic lifting with per-point confidence | written in this repo (`semantics/`) |
-| Scene graph and dimension extraction | written in this repo (`semantics/`) |
-| Agent orchestration, quality gates, report generation | written in this repo (`agent/`) |
-| Web viewer | written in this repo (`viewer/`) |
+| SfM (feature matching, incremental mapping, bundle adjustment) | COLMAP through `pycolmap` |
+| 2D instance masks | SAM ViT-B, pretrained, not trained here |
+| FPFH features, normal estimation, voxel filtering, DBSCAN, the library registration baseline | Open3D |
+| Sim(3) alignment (Umeyama), RANSAC over Sim(3), scale-bounded trimmed ICP, Manhattan-frame registration, occupancy-IoU ranking | written here (`registration/`) |
+| Pose, point-cloud and reprojection metrics; scan loading and alignment | written here (`eval/`) |
+| Room axes, plane detection with camera-based roles, point labelling and confidence, scene graph, cross-view instance voting | written here (`semantics/`) |
+| Quality gates, camera-model comparison, tape cross-check, decision-logging controller | written here (`agent/`) |
+
+The controller is a deterministic rule-based program; no language model is involved.
 
 ## Layout
 
 ```
-eval/          metrics against ground truth
-registration/  Sim(3), FPFH+RANSAC, ICP, comparisons
-semantics/     2D->3D lifting, uncertainty, scene graph
-agent/         tool orchestration, quality gates, reports
-viewer/        static web viewer (point cloud, error and uncertainty views)
-scripts/       setup and per-day run scripts
-data/          local only, git-ignored
+eval/          metrics against ground truth, scan loading
+registration/  Sim(3), RANSAC, ICP, Manhattan frame, comparison harness
+semantics/     structure, scene graph, SAM lifting, evaluation against the scan
+agent/         quality gates and the controller
+scripts/       baseline reconstruction script
+tests/         unit tests (40)
+docs/          debug logs and findings
+viewer/        placeholder, not built
+data/          local only, git-ignored (datasets, model weights)
+outputs/       local only, git-ignored
 ```
 
 ## Setup
@@ -43,15 +67,40 @@ data/          local only, git-ignored
 python -m venv .venv
 .venv\Scripts\activate
 pip install -r requirements.txt
+pip install torch torchvision --index-url https://download.pytorch.org/whl/cu126
+python -m pytest
 ```
 
-COLMAP must be installed separately and available on `PATH`.
+PyTorch is only needed for the SAM step; pick the build that matches your CUDA version.
 
-## Evaluation data
+## Reproducing the results
 
-- ETH3D multi-view benchmark scenes (laser-scan ground truth) for quantitative results.
-- A self-captured room with tape-measured dimensions for the demo.
+Data is not included. ETH3D scenes come from <https://www.eth3d.net/datasets> (files named
+`<scene>_dslr_jpg.7z` and `<scene>_scan_clean.7z`, extract with `py7zr` or 7-Zip into
+`data/eth3d/<scene>/`). The SAM ViT-B checkpoint is
+`https://dl.fbaipublicfiles.com/segment_anything/sam_vit_b_01ec64.pth` (375 MB), saved to
+`data/models/`.
+
+```
+# controller: reconstruct with three camera models, choose one, derive scale from tapes
+python -m agent.controller --images data/eth3d/office/images/dslr_images \
+    --out outputs/office_agent --tape height=4.05 --tape horizontal=3.13
+
+# accuracy of a reconstruction against the laser scan
+python -m eval.run_eval --model outputs/office_agent/opencv/best \
+    --scene data/eth3d/office --out outputs/office_agent/opencv/eval.json
+
+# structural semantics against the scan, and SAM lifting
+python -m semantics.evaluate --model outputs/office_agent/opencv/best \
+    --scene data/eth3d/office --out outputs/office_agent/opencv/semantics.json
+python -m semantics.run_sam --model outputs/office_agent/opencv/best \
+    --images data/eth3d/office/images/dslr_images \
+    --checkpoint data/models/sam_vit_b_01ec64.pth --out outputs/office_agent/sam
+```
+
+The tape values above were taken from the laser scan to simulate a measured room. For a real room
+they are distances measured with a tape between the walls or floor and ceiling.
 
 ## License
 
-TBD before making the repository public.
+MIT. See [LICENSE](LICENSE). ETH3D data and the SAM weights have their own licences.
