@@ -9,6 +9,7 @@ Strategies (all map the SfM points into the scan frame, scale unknown):
                    poses, so it is a reference point, not a deployable method.
   open3d_default : Open3D FPFH + RANSAC (with scaling) + ICP (with scaling).
   ours           : registration.pipeline.register (own RANSAC and ICP).
+  ours_manhattan : registration.manhattan.register_manhattan (room-axes coarse stage).
   ours_icp_only  : own ICP started from the oracle_centres transform.
 """
 import argparse
@@ -24,6 +25,7 @@ from eval.colmap_io import (
     read_reference_poses,
 )
 from eval.metrics import accuracy_completeness
+from registration.manhattan import register_manhattan
 from registration.pipeline import (
     compose, fpfh, icp_sim3, inverse_similarity, normalise, register, similarity,
 )
@@ -116,6 +118,7 @@ def main() -> None:
     for name, fn in (
         ("open3d_default", lambda s: open3d_default(pts, scan, args.voxel, s)),
         ("ours", lambda s: register(pts, scan, voxel=args.voxel, seed=s).transform),
+        ("ours_manhattan", lambda s: register_manhattan(pts, scan, seed=s).transform),
     ):
         runs = []
         for seed in range(args.seeds):

@@ -105,7 +105,7 @@ def ransac_sim3(
 def icp_sim3(
     src: np.ndarray, dst: np.ndarray, init: Sim3, max_dist: float,
     iters: int = 60, trim: float = 0.9, tol: float = 1e-7,
-    scale_bounds: tuple[float, float] | None = None,
+    scale_bounds: tuple[float, float] | None = None, tree: cKDTree | None = None,
 ) -> Sim3:
     """Trimmed point-to-point ICP with scale.
 
@@ -117,7 +117,7 @@ def icp_sim3(
     objectives: shrinking the source onto any surface lowers the residual. When
     ``scale_bounds`` is given, the fitted scale is clamped to it.
     """
-    tree = cKDTree(dst)
+    tree = tree if tree is not None else cKDTree(dst)
     model = init
     prev = np.inf
     for _ in range(iters):

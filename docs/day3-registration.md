@@ -66,3 +66,41 @@ Countermeasures implemented:
   remaining ambiguity with the scan.
 - Resolve scale and placement in deployment from tape-measured distances, which is the real use
   case for the self-captured room.
+
+## Result 3: room-plane (Manhattan) coarse registration
+
+Code: `registration/manhattan.py`, tests: `tests/test_manhattan.py` (22 tests in total pass).
+Method: estimate the three dominant orthogonal directions of each cloud from surface normals,
+enumerate the 24 axis-aligned rotations relating the two frames, set scale and translation per
+candidate (robust bounding-box extents, or per-axis wall-peak histogram correlation), refine with
+scale-bounded ICP, and rank candidates by voxel-occupancy IoU (symmetric, so it cannot be
+improved by shrinking the source).
+
+Findings on the `office` reconstruction (sparse points vs. the scan):
+
+| Stage | Outcome |
+|---|---|
+| Axis estimation | Correct. Estimated source axes match the reference-pose frame at |cos| 0.993 to 1.0 |
+| Candidate ranking | Works. The candidate with the highest IoU was also the one with the smallest camera error |
+| Extent initialisation | Best candidate still 106 cm from the true camera positions; scale 0.187 vs. true 0.153 |
+| Histogram initialisation | Worse: 196 cm, and 609 s versus 189 s |
+| Runtime (extent mode) | 189 s per run on 420k scan points, deterministic across seeds |
+
+Interpretation: the room-plane idea fixes the **rotation**, which FPFH could not (all five
+FPFH seeds were off by metres). It does not fix **translation and scale**. The scale is about 22%
+too large, which is what a robust-extent ratio gives when the sparse SfM points cover a smaller
+part of the room than the scan does. I have not verified that explanation (for example by cropping
+the scan to the cameras' field of view first).
+
+On synthetic rooms the same code recovers scale to 5% and placement to under 10 cm, and the
+extent initialisation was already within 0.5% of the truth there. The histogram initialisation
+was worse than extent on sparse synthetic input too, and is kept only as an experimental option.
+
+## What this means for the project
+
+- Registration to a laser scan is a benchmark device. For the self-captured demo room there is
+  no scan; what is needed is **orientation** (room axes, which this work provides) and **metric
+  scale** (from tape-measured distances).
+- The remaining registration failure (translation and scale under partial coverage) is therefore
+  not on the critical path for the demo, and I am recording it as an open problem instead of tuning
+  further against the benchmark.
