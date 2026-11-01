@@ -9,7 +9,8 @@ set of quality gates that decide which camera model and which measurements to tr
 evaluated against laser scans from the ETH3D benchmark.
 
 > Status: research prototype. Several parts work, some did not, and both are documented below.
-> There is no web viewer yet.
+> A static [web viewer](#viewer) shows the two test scenes with the pipeline's labels, confidences,
+> quality gates and decision log.
 
 ## What works and what did not
 
@@ -53,10 +54,10 @@ eval/          metrics against ground truth, scan loading
 registration/  Sim(3), RANSAC, ICP, Manhattan frame, comparison harness
 semantics/     structure, scene graph, SAM lifting, evaluation against the scan
 agent/         quality gates and the controller
-scripts/       baseline reconstruction script
-tests/         unit tests (40)
+scripts/       baseline reconstruction, viewer export
+tests/         unit tests (46)
 docs/          debug logs and findings
-viewer/        placeholder, not built
+viewer/        static Three.js viewer and its exported data (viewer/data)
 data/          local only, git-ignored (datasets, model weights)
 outputs/       local only, git-ignored
 ```
@@ -100,6 +101,28 @@ python -m semantics.run_sam --model outputs/office_agent/opencv/best \
 
 The tape values above were taken from the laser scan to simulate a measured room. For a real room
 they are distances measured with a tape between the walls or floor and ceiling.
+
+## Viewer
+
+`viewer/index.html` is a static page (Three.js from a CDN, no build step). It colours the
+reconstructed points by photo colour, structure label, label confidence or SAM instance, draws the
+fitted planes and camera positions, lets you click a point to read what the pipeline inferred for
+it, and lists the quality gates, the camera-model comparison, the scale basis and the controller's
+decision log. It shows the reconstruction only; the laser scan is not shown because registration to
+it did not work.
+
+```
+# export a controller run (writes viewer/data/<name>/)
+python -m scripts.export_viewer --report outputs/office_agent/report.json --name office \
+    --instance-labels outputs/office_agent/sam/instance_labels.npy
+python -m scripts.export_viewer --report outputs/delivery_agent/report.json --name delivery_area
+
+# serve the repo root and open http://localhost:8000/viewer/
+python -m http.server 8000
+```
+
+The exported points are a sparse reconstruction derived from ETH3D photos (about 0.7 MB for both
+scenes). They are subject to the ETH3D data licence, not the MIT licence of the code.
 
 ## License
 
