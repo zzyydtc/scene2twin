@@ -1,0 +1,30 @@
+Licence for the files in viewer/data/
+
+The files in this directory are derived from the ETH3D benchmark data
+(https://www.eth3d.net), which is licensed under the Creative Commons
+Attribution-NonCommercial-ShareAlike 4.0 International License. The derived
+files are therefore released under the same licence:
+
+    https://creativecommons.org/licenses/by-nc-sa/4.0/
+
+What is here, per scene (office, delivery_area):
+
+  images/            Downscaled (800 px wide) JPEG copies of the ETH3D DSLR photos.
+  points.f32 ...     Sparse 3D points from a COLMAP reconstruction of those photos,
+                     with colours taken from the photos.
+  labels.u8,
+  confidence.u8,
+  instances.i16      Per-point structure labels, confidences and instance ids computed
+                     by the code in this repository.
+  obs_*              The 2D keypoints of each photo that were triangulated into 3D.
+  meta.json          Camera poses, fitted planes, quality gates and decision log.
+
+Attribution: original data by T. Schops, J. L. Schonberger, S. Galliani,
+T. Sattler, K. Schindler, M. Pollefeys and A. Geiger, "A Multi-View Stereo
+Benchmark with High-Resolution Images and Multi-Camera Videos", CVPR 2017.
+Changes: photos downscaled and re-encoded; points reconstructed from the photos;
+labels and confidences added; coordinates rotated, scaled and centred.
+
+You may share and adapt this material for non-commercial purposes if you give
+this credit, indicate changes, and distribute your contributions under the same
+licence. The MIT licence in the repository root applies to the code only.

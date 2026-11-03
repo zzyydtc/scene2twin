@@ -133,9 +133,28 @@ python -m http.server 8000
 ```
 
 `viewer/data` holds a sparse reconstruction and 800 px copies of the ETH3D photos (about 5 MB for
-both scenes). These are derived from ETH3D data and subject to its licence, not the MIT licence of
-the code.
+both scenes). It is derived from ETH3D data and is licensed under CC BY-NC-SA 4.0, not the MIT
+licence of the code; see [viewer/data/LICENSE](viewer/data/LICENSE).
 
 ## License
 
-MIT. See [LICENSE](LICENSE). ETH3D data and the SAM weights have their own licences.
+- **Code:** MIT. See [LICENSE](LICENSE).
+- **`viewer/data/`** (downscaled ETH3D photos and the points, labels and keypoints derived from
+  them): [CC BY-NC-SA 4.0](https://creativecommons.org/licenses/by-nc-sa/4.0/), inherited from
+  ETH3D. Non-commercial use only, with attribution, and adaptations must be shared under the same
+  licence. The labels, confidences and instance ids in it were computed by this project's code.
+- **SAM:** the Segment Anything code and model weights are Apache 2.0 (Meta AI). The weights are
+  downloaded separately and are not in this repository.
+
+## Credits and citation
+
+The test scenes (`office`, `delivery_area`) and the reference laser scans are from the ETH3D
+benchmark (<https://www.eth3d.net>). If you use this work, cite the ETH3D publication for the
+high-resolution multi-view data:
+
+> T. Schöps, J. L. Schönberger, S. Galliani, T. Sattler, K. Schindler, M. Pollefeys and A. Geiger.
+> A Multi-View Stereo Benchmark with High-Resolution Images and Multi-Camera Videos. CVPR 2017.
+
+Other work used: COLMAP (J. L. Schönberger and J.-M. Frahm, *Structure-from-Motion Revisited*,
+CVPR 2016) through `pycolmap`; Segment Anything (A. Kirillov et al., ICCV 2023); Open3D (Q.-Y. Zhou,
+J. Park and V. Koltun, 2018); Three.js for the viewer.
