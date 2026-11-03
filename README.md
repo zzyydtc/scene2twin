@@ -104,25 +104,37 @@ they are distances measured with a tape between the walls or floor and ceiling.
 
 ## Viewer
 
-`viewer/index.html` is a static page (Three.js from a CDN, no build step). It colours the
-reconstructed points by photo colour, structure label, label confidence or SAM instance, draws the
-fitted planes and camera positions, lets you click a point to read what the pipeline inferred for
-it, and lists the quality gates, the camera-model comparison, the scale basis and the controller's
-decision log. It shows the reconstruction only; the laser scan is not shown because registration to
-it did not work.
+`viewer/index.html` is a static page (Three.js from a CDN, no build step). It shows the
+reconstruction only; the laser scan is not shown because registration to it did not work.
+
+- **Colouring:** photo colour, structure label, label confidence or SAM instance.
+- **Layers (checkboxes):** the points, each structure class on its own, the fitted room planes,
+  camera positions, and the photos placed in 3D at their cameras.
+- **Compare:** splits the view with a draggable divider and colours the left and right sides
+  differently, from the same viewpoint (for example structure against photo colour).
+- **Original photos:** pick a photo, or click a camera in the 3D view. The photo opens with the
+  reconstructed points drawn over it (the keypoints that were triangulated into 3D), coloured by
+  structure, confidence or instance. "View from here" moves the 3D camera to the photo's pose, so
+  you can compare the photo with the model from the same viewpoint; this ignores lens distortion
+  and levels the roll, so it is approximate.
+- **Inspect:** click a point to read what the pipeline inferred for it. The panel also lists the
+  quality gates, the camera-model comparison, the scale basis and the controller's decision log.
 
 ```
-# export a controller run (writes viewer/data/<name>/)
+# export a controller run (writes viewer/data/<name>/, with downscaled photos)
 python -m scripts.export_viewer --report outputs/office_agent/report.json --name office \
-    --instance-labels outputs/office_agent/sam/instance_labels.npy
-python -m scripts.export_viewer --report outputs/delivery_agent/report.json --name delivery_area
+    --instance-labels outputs/office_agent/sam/instance_labels.npy \
+    --images data/eth3d/office/images/dslr_images
+python -m scripts.export_viewer --report outputs/delivery_agent/report.json --name delivery_area \
+    --images data/eth3d/delivery_area/images/dslr_images
 
 # serve the repo root and open http://localhost:8000/viewer/
 python -m http.server 8000
 ```
 
-The exported points are a sparse reconstruction derived from ETH3D photos (about 0.7 MB for both
-scenes). They are subject to the ETH3D data licence, not the MIT licence of the code.
+`viewer/data` holds a sparse reconstruction and 800 px copies of the ETH3D photos (about 5 MB for
+both scenes). These are derived from ETH3D data and subject to its licence, not the MIT licence of
+the code.
 
 ## License
 

@@ -11,28 +11,34 @@
     --pass: #4cc38a; --warn: #e8b04b; --fail: #f0706b;
   }
   * { box-sizing: border-box; }
+  [hidden] { display: none !important; }
   html, body { height: 100%; margin: 0; }
   body { background: var(--bg); color: var(--text); font: 14px/1.45 system-ui, -apple-system, "Segoe UI", sans-serif; overflow: hidden; }
   #app { display: grid; grid-template-columns: 1fr 360px; height: 100%; }
-  #stage { position: relative; min-width: 0; }
-  canvas { display: block; width: 100%; height: 100%; touch-action: none; }
+  #stage { position: relative; min-width: 0; overflow: hidden; }
+  canvas#gl { display: block; width: 100%; height: 100%; touch-action: none; }
   #topbar { position: absolute; left: 12px; top: 12px; right: 12px; display: flex; gap: 8px; flex-wrap: wrap; align-items: center; pointer-events: none; }
   #topbar > * { pointer-events: auto; }
   .chip { background: color-mix(in srgb, var(--panel) 88%, transparent); border: 1px solid var(--line); border-radius: 8px; padding: 6px 10px; }
   select, button { font: inherit; color: var(--text); background: var(--panel-2); border: 1px solid var(--line); border-radius: 8px; padding: 6px 10px; }
   button { cursor: pointer; }
   button[aria-pressed="true"] { border-color: var(--accent); color: var(--accent); }
+  button:focus-visible, select:focus-visible, input:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
   #panel { background: var(--panel); border-left: 1px solid var(--line); overflow-y: auto; padding: 14px 16px 24px; }
   h1 { font-size: 16px; margin: 0 0 2px; }
   h2 { font-size: 12px; text-transform: uppercase; letter-spacing: .06em; color: var(--muted); margin: 20px 0 8px; font-weight: 600; }
   p { margin: 6px 0; }
   .muted { color: var(--muted); }
-  .seg { display: flex; flex-wrap: wrap; gap: 6px; }
+  .seg { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 6px; }
+  .seg-label { font-size: 12px; color: var(--muted); width: 100%; }
   .legend { display: grid; gap: 4px; margin-top: 8px; }
   .legend div { display: flex; align-items: center; gap: 8px; }
-  .sw { width: 12px; height: 12px; border-radius: 3px; flex: none; border: 1px solid rgba(255,255,255,.25); }
+  .sw { width: 12px; height: 12px; border-radius: 3px; flex: none; border: 1px solid rgba(255,255,255,.25); display: inline-block; }
   .ramp { height: 10px; border-radius: 5px; margin-top: 8px; }
   .ramp-labels { display: flex; justify-content: space-between; font-size: 12px; color: var(--muted); }
+  .check { display: flex; align-items: center; gap: 8px; padding: 3px 0; cursor: pointer; }
+  .check input { width: 16px; height: 16px; accent-color: var(--accent); margin: 0; }
+  .sub { margin: 0 0 4px 24px; }
   .gate { border: 1px solid var(--line); border-radius: 8px; padding: 8px 10px; margin-bottom: 6px; background: var(--panel-2); }
   .gate b { font-weight: 600; }
   .badge { display: inline-block; font-size: 11px; font-weight: 700; letter-spacing: .04em; padding: 1px 7px; border-radius: 99px; margin-right: 6px; color: #101317; }
@@ -51,9 +57,33 @@
   input[type=range] { width: 100%; }
   #status { position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%); }
   a { color: var(--accent); }
+
+  #grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 4px; }
+  #grid button { padding: 0; border-radius: 6px; overflow: hidden; line-height: 0; position: relative; }
+  #grid button[aria-pressed="true"] { outline: 2px solid var(--accent); }
+  #grid img { width: 100%; aspect-ratio: 3 / 2; object-fit: cover; display: block; }
+
+  #photo { position: absolute; left: 12px; bottom: 12px; width: min(540px, calc(100% - 24px)); background: var(--panel); border: 1px solid var(--line); border-radius: 10px; overflow: hidden; box-shadow: 0 8px 28px rgba(0,0,0,.45); }
+  #photo[hidden] { display: none; }
+  .ph-head, .ph-foot { display: flex; align-items: center; gap: 6px; padding: 6px 8px; flex-wrap: wrap; }
+  .ph-head b { margin-right: auto; }
+  .ph-head button { padding: 3px 9px; }
+  .ph-body { position: relative; background: #000; line-height: 0; min-height: 60px; }
+  .ph-body img { width: 100%; display: block; }
+  .ph-body canvas { position: absolute; left: 0; top: 0; width: 100%; height: 100%; pointer-events: none; }
+  .ph-foot { font-size: 13px; }
+  .ph-foot select { padding: 3px 8px; }
+
+  #divider { position: absolute; top: 0; bottom: 0; width: 0; display: none; pointer-events: none; }
+  #divider .bar { position: absolute; top: 0; bottom: 0; left: -1px; width: 2px; background: var(--accent); }
+  #divider .handle { position: absolute; top: 50%; left: -16px; width: 32px; height: 56px; margin-top: -28px; border-radius: 16px; background: var(--accent); color: #0b1a2b; display: flex; align-items: center; justify-content: center; font-weight: 700; cursor: ew-resize; pointer-events: auto; touch-action: none; user-select: none; }
+  #divider .tag { position: absolute; top: 50%; margin-top: -58px; white-space: nowrap; pointer-events: none; font-size: 13px; }
+  #divider .tag.l { right: 22px; } #divider .tag.r { left: 22px; }
+
   @media (max-width: 800px) {
     #app { grid-template-columns: 1fr; grid-template-rows: 55% 45%; }
     #panel { border-left: 0; border-top: 1px solid var(--line); }
+    #grid { grid-template-columns: repeat(3, 1fr); }
   }
 </style>
 <script type="importmap">
@@ -69,9 +99,29 @@
     <canvas id="gl"></canvas>
     <div id="topbar">
       <label class="chip">Scene <select id="scene"></select></label>
-      <button id="btn-planes" aria-pressed="true">Planes</button>
-      <button id="btn-cams" aria-pressed="true">Cameras</button>
+      <button id="btn-compare" aria-pressed="false" title="Split the view and colour each side differently">Compare</button>
       <button id="btn-reset">Reset view</button>
+    </div>
+    <div id="divider">
+      <div class="bar"></div>
+      <div class="tag l chip" id="tag-a"></div><div class="tag r chip" id="tag-b"></div>
+      <div class="handle" id="handle" role="slider" aria-label="Comparison divider" tabindex="0">&#8596;</div>
+    </div>
+    <div id="photo" hidden>
+      <div class="ph-head">
+        <b id="ph-name"></b>
+        <button id="ph-prev" aria-label="Previous photo">&#8249;</button>
+        <button id="ph-next" aria-label="Next photo">&#8250;</button>
+        <button id="ph-here" title="Move the 3D camera to where this photo was taken">View from here</button>
+        <button id="ph-close" aria-label="Close photo">&#10005;</button>
+      </div>
+      <div class="ph-body"><img id="ph-img" alt="Original photo"><canvas id="ph-ov"></canvas></div>
+      <div class="ph-foot">
+        <label>Model overlay <select id="ph-mode">
+          <option value="structure">structure</option><option value="confidence">confidence</option>
+          <option value="instance">instances</option><option value="none">off</option></select></label>
+        <span class="muted" id="ph-count"></span>
+      </div>
     </div>
     <div id="status" class="chip">Loading…</div>
   </div>
@@ -80,11 +130,24 @@
     <p class="muted" id="subtitle"></p>
 
     <h2>Colour points by</h2>
-    <div class="seg" id="modes"></div>
-    <div id="legend"></div>
+    <div class="seg" id="modes-a"><span class="seg-label" id="lab-a" hidden>Left side (A)</span></div>
+    <div id="legend-a"></div>
+    <div class="seg" id="modes-b" hidden><span class="seg-label">Right side (B)</span></div>
+    <div id="legend-b" hidden></div>
+
+    <h2>Layers</h2>
+    <label class="check"><input type="checkbox" id="ly-points" checked> Reconstructed points</label>
+    <div class="sub" id="ly-classes"></div>
+    <label class="check"><input type="checkbox" id="ly-planes" checked> Room model: fitted planes</label>
+    <label class="check"><input type="checkbox" id="ly-cams" checked> Camera positions</label>
+    <label class="check"><input type="checkbox" id="ly-photos"> Photos placed in 3D</label>
 
     <h2>Point size</h2>
     <input type="range" id="size" min="1" max="10" step="0.5" value="3" aria-label="Point size">
+
+    <h2>Original photos</h2>
+    <p class="muted">Pick a photo, or click a camera in the 3D view. The photo opens with the model drawn over it.</p>
+    <div id="grid"></div>
 
     <h2>Selected point</h2>
     <div class="picked" id="picked"><span class="muted">Click a point to see what the pipeline inferred for it.</span></div>
@@ -104,6 +167,7 @@
     <h2>Read this first</h2>
     <p class="note">Labels and confidences are inferences from the reconstructed points. They were checked against a laser scan on these two scenes only. Registering the reconstruction to that scan did not work, so no scan geometry is shown here.</p>
     <p class="note">Tape distances used for scale were taken from the laser scan to simulate measuring a real room.</p>
+    <p class="note">The photo overlay shows only the keypoints that were triangulated into 3D points. "View from here" ignores lens distortion and levels the camera roll, so it is approximate.</p>
     <p class="muted">Points come from COLMAP structure-from-motion on ETH3D photos. Code and results: <a href="https://github.com/zzyydtc/scene2twin">scene2twin</a>.</p>
   </aside>
 </div>
@@ -116,18 +180,15 @@ const SCENES = [
   { id: "office", title: "Office" },
   { id: "delivery_area", title: "Delivery area" },
 ];
-const MODES = [
-  { id: "rgb", title: "Photo colour" },
-  { id: "structure", title: "Structure" },
-  { id: "confidence", title: "Confidence" },
-  { id: "instance", title: "Instances" },
-];
+const MODE_TITLES = { rgb: "Photo colour", structure: "Structure", confidence: "Confidence", instance: "Instances" };
 // Okabe-Ito based, readable on a dark background and for most colour-vision types.
 const WALLS = ["#009e73", "#56b4e9", "#f0e442", "#d55e00"];
 const ROLE_COLOR = { object: "#e69f00", floor: "#4a90d9", ceiling: "#cc79a7" };
 const RAMP = ["#5b2a86", "#3b528b", "#21908d", "#5dc863", "#fde725"]; // low -> high confidence
+const ACCENT = 0x6cb6ff;
 
 const $ = (id) => document.getElementById(id);
+const esc = (s) => String(s).replace(/[&<>]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;" }[c]));
 const canvas = $("gl");
 const renderer = new THREE.WebGLRenderer({ canvas, antialias: true });
 renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
@@ -137,67 +198,105 @@ const camera = new THREE.PerspectiveCamera(50, 1, 0.01, 1000);
 const controls = new OrbitControls(camera, canvas);
 controls.enableDamping = true;
 
-const state = { meta: null, data: null, mode: "structure", points: null, planes: null, cams: null, focus: null, labelColors: [] };
+const state = {
+  id: null, meta: null, data: null, obs: null, labelColors: [], labelOn: [], excluded: new Set(),
+  modeA: "structure", modeB: "rgb", compare: false, split: 0.5, sel: null, focus: null,
+  pointsA: null, pointsB: null, planes: null, cams: null, photos: null, frustum: null,
+};
+const GROUPS = ["pointsA", "pointsB", "planes", "cams", "photos", "frustum"];
+const size = { w: 1, h: 1 };
 
+// ---------- colour ----------
 function lerpColor(stops, t) {
   const x = Math.min(Math.max(t, 0), 1) * (stops.length - 1);
   const i = Math.min(Math.floor(x), stops.length - 2);
-  const a = new THREE.Color(stops[i]), b = new THREE.Color(stops[i + 1]);
-  return a.lerp(b, x - i);
+  return new THREE.Color(stops[i]).lerp(new THREE.Color(stops[i + 1]), x - i);
 }
 function instanceColor(id) { return new THREE.Color().setHSL(((id * 137.508) % 360) / 360, 0.65, 0.58); }
 function labelColors(labels) {
   let w = 0;
-  return labels.map((name) => {
-    if (name === "object") return new THREE.Color(ROLE_COLOR.object);
-    if (name === "floor") return new THREE.Color(ROLE_COLOR.floor);
-    if (name === "ceiling") return new THREE.Color(ROLE_COLOR.ceiling);
-    return new THREE.Color(WALLS[w++ % WALLS.length]);
-  });
+  return labels.map((name) => new THREE.Color(name in ROLE_COLOR ? ROLE_COLOR[name] : WALLS[w++ % WALLS.length]));
+}
+function colorFor(mode, i, c) {
+  const { data } = state;
+  if (mode === "rgb") c.setRGB(data.rgb[i * 3] / 255, data.rgb[i * 3 + 1] / 255, data.rgb[i * 3 + 2] / 255, THREE.SRGBColorSpace);
+  else if (mode === "structure") c.copy(state.labelColors[data.label[i]]);
+  else if (mode === "confidence") c.copy(lerpColor(RAMP, data.conf[i] / 255));
+  else {
+    const id = data.inst[i];
+    if (id < 0) c.set("#3a424d"); else if (state.excluded.has(id)) c.set("#7a5a5a"); else c.copy(instanceColor(id));
+  }
+  return c;
+}
+// The point shader writes vertex colours without colour management, so store sRGB values.
+function paint(points, mode) {
+  const attr = points.geometry.attributes.color, a = attr.array, c = new THREE.Color(), rgb = { r: 0, g: 0, b: 0 };
+  for (let i = 0; i < state.meta.n_points; i++) {
+    colorFor(mode, i, c).getRGB(rgb, THREE.SRGBColorSpace);
+    a[i * 3] = rgb.r; a[i * 3 + 1] = rgb.g; a[i * 3 + 2] = rgb.b;
+  }
+  attr.needsUpdate = true;
 }
 
+// ---------- loading ----------
 async function load(id) {
   $("status").style.display = ""; $("status").textContent = "Loading…";
+  state.id = id; state.sel = null; $("photo").hidden = true;
   const base = `data/${id}/`;
   const get = async (f, T) => new T(await (await fetch(base + f)).arrayBuffer());
   const meta = await (await fetch(base + "meta.json")).json();
-  const data = {
+  state.data = {
     xyz: await get("points.f32", Float32Array), rgb: await get("colors.u8", Uint8Array),
     label: await get("labels.u8", Uint8Array), conf: await get("confidence.u8", Uint8Array),
     inst: await get("instances.i16", Int16Array),
   };
-  state.meta = meta; state.data = data; state.labelColors = labelColors(meta.labels);
+  state.obs = { idx: await get("obs_index.u32", Uint32Array), u: await get("obs_u.f32", Float32Array), v: await get("obs_v.f32", Float32Array) };
+  state.meta = meta;
+  state.labelColors = labelColors(meta.labels);
+  state.labelOn = meta.labels.map(() => true);
+  state.excluded = new Set(meta.instances.filter((x) => x.excluded).map((x) => x.id));
   build();
   $("status").style.display = "none";
 }
 
 function percentile(values, p) { const s = Float32Array.from(values).sort(); return s[Math.floor(p * (s.length - 1))]; }
 
+function disposeGroup(o) {
+  o.traverse?.((x) => { x.geometry?.dispose(); x.material?.map?.dispose(); x.material?.dispose?.(); });
+}
+
 function build() {
-  for (const k of ["points", "planes", "cams"]) if (state[k]) { scene.remove(state[k]); state[k].traverse?.((o) => { o.geometry?.dispose(); o.material?.dispose(); }); }
+  for (const k of GROUPS) if (state[k]) { scene.remove(state[k]); disposeGroup(state[k]); state[k] = null; }
   const { meta, data } = state, n = meta.n_points;
 
   // Frame the view on the bulk of the points; sparse reconstructions have far outliers.
   const lo = [0, 1, 2].map((a) => percentile(data.xyz.filter((_, i) => i % 3 === a), 0.02));
   const hi = [0, 1, 2].map((a) => percentile(data.xyz.filter((_, i) => i % 3 === a), 0.98));
   const centre = new THREE.Vector3(...lo.map((l, i) => (l + hi[i]) / 2));
-  const size = new THREE.Vector3(...hi.map((h, i) => h - lo[i]));
-  state.focus = { lo, hi, centre, diag: size.length() };
+  const diag = new THREE.Vector3(...hi.map((h, i) => h - lo[i])).length();
+  state.focus = { lo, hi, centre, diag };
 
-  const geo = new THREE.BufferGeometry();
-  geo.setAttribute("position", new THREE.BufferAttribute(data.xyz, 3));
-  geo.setAttribute("color", new THREE.BufferAttribute(new Float32Array(n * 3), 3));
+  // Two point layers share positions and visibility; they differ only in colour (for compare mode).
+  const pos = new THREE.BufferAttribute(data.xyz, 3), vis = new THREE.BufferAttribute(new Float32Array(n).fill(1), 1);
+  const mk = () => {
+    const g = new THREE.BufferGeometry();
+    g.setAttribute("position", pos); g.setAttribute("vis", vis);
+    g.setAttribute("color", new THREE.BufferAttribute(new Float32Array(n * 3), 3));
+    return g;
+  };
   const mat = new THREE.ShaderMaterial({
     uniforms: { size: { value: +$("size").value }, dpr: { value: renderer.getPixelRatio() } },
-    vertexColors: true, transparent: false,
+    vertexColors: true,
     // Constant on-screen size in CSS pixels: a sparse cloud is unreadable if near points balloon.
-    vertexShader: `uniform float size; uniform float dpr; varying vec3 vColor;
-      void main(){ vColor = color; gl_PointSize = size * dpr; gl_Position = projectionMatrix * modelViewMatrix * vec4(position,1.0); }`,
+    vertexShader: `uniform float size; uniform float dpr; attribute float vis; varying vec3 vColor;
+      void main(){ vColor = color; gl_PointSize = size * dpr;
+        gl_Position = vis < 0.5 ? vec4(2.0, 2.0, 2.0, 1.0) : projectionMatrix * modelViewMatrix * vec4(position, 1.0); }`,
     fragmentShader: `varying vec3 vColor;
-      void main(){ vec2 c = gl_PointCoord - 0.5; if (dot(c,c) > 0.25) discard; gl_FragColor = vec4(vColor,1.0); }`,
+      void main(){ vec2 c = gl_PointCoord - 0.5; if (dot(c,c) > 0.25) discard; gl_FragColor = vec4(vColor, 1.0); }`,
   });
-  state.points = new THREE.Points(geo, mat);
-  scene.add(state.points);
+  state.pointsA = new THREE.Points(mk(), mat); state.pointsB = new THREE.Points(mk(), mat);
+  state.pointsA.frustumCulled = state.pointsB.frustumCulled = false;
+  scene.add(state.pointsA, state.pointsB);
 
   // Fitted planes, drawn over the focus box.
   state.planes = new THREE.Group();
@@ -212,11 +311,10 @@ function build() {
     state.planes.add(new THREE.Mesh(g,
       new THREE.MeshBasicMaterial({ color: state.labelColors[meta.labels.indexOf(p.name)], transparent: true, opacity: 0.10, side: THREE.DoubleSide, depthWrite: false })));
   });
-  state.planes.visible = $("btn-planes").getAttribute("aria-pressed") === "true";
   scene.add(state.planes);
 
   // Capture positions as dots with a short line along the viewing direction.
-  const len = state.focus.diag * 0.04;
+  const len = diag * 0.04;
   const dots = new Float32Array(meta.cameras.length * 3), segs = new Float32Array(meta.cameras.length * 6);
   meta.cameras.forEach((c, i) => {
     dots.set(c.position, i * 3);
@@ -227,48 +325,63 @@ function build() {
   state.cams.add(new THREE.Points(dg, new THREE.PointsMaterial({ color: 0xffffff, size: 6, sizeAttenuation: false })));
   const sg = new THREE.BufferGeometry(); sg.setAttribute("position", new THREE.BufferAttribute(segs, 3));
   state.cams.add(new THREE.LineSegments(sg, new THREE.LineBasicMaterial({ color: 0xffffff })));
-  state.cams.visible = $("btn-cams").getAttribute("aria-pressed") === "true";
   scene.add(state.cams);
 
+  state.photos = null; // built on first use
+  applyLayers();
   resetView();
-  recolor();
+  paint(state.pointsA, state.modeA); paint(state.pointsB, state.modeB);
   renderPanel();
 }
 
-function recolor() {
-  const { meta, data } = state, n = meta.n_points, attr = state.points.geometry.attributes.color, a = attr.array;
-  const c = new THREE.Color();
-  for (let i = 0; i < n; i++) {
-    if (state.mode === "rgb") c.setRGB(data.rgb[i * 3] / 255, data.rgb[i * 3 + 1] / 255, data.rgb[i * 3 + 2] / 255, THREE.SRGBColorSpace);
-    else if (state.mode === "structure") c.copy(state.labelColors[data.label[i]]);
-    else if (state.mode === "confidence") c.copy(lerpColor(RAMP, data.conf[i] / 255));
-    else {
-      const id = data.inst[i], info = meta.instances.find((x) => x.id === id);
-      if (id < 0) c.set("#3a424d"); else if (info?.excluded) c.set("#7a5a5a"); else c.copy(instanceColor(id));
-    }
-    a[i * 3] = c.r; a[i * 3 + 1] = c.g; a[i * 3 + 2] = c.b;
-  }
-  attr.needsUpdate = true;
-  renderLegend();
+// ---------- layers ----------
+function applyLayers() {
+  const on = (id) => $(id).checked;
+  if (state.planes) state.planes.visible = on("ly-planes");
+  if (state.cams) state.cams.visible = on("ly-cams");
+  if (on("ly-photos") && !state.photos) buildPhotos();
+  if (state.photos) state.photos.visible = on("ly-photos");
+  const vis = state.pointsA?.geometry.attributes.vis;
+  if (vis) { state.data.label.forEach((l, i) => { vis.array[i] = state.labelOn[l] ? 1 : 0; }); vis.needsUpdate = true; }
+  document.querySelectorAll("#ly-classes input").forEach((c) => { c.disabled = !on("ly-points"); });
+  drawOverlay();
 }
 
-function renderLegend() {
-  const { meta, data } = state, el = $("legend"); el.innerHTML = "";
+// Each photo as a textured quad just in front of its camera, facing back toward it.
+function buildPhotos() {
+  const { meta, focus } = state;
+  const g = new THREE.Group(), loader = new THREE.TextureLoader(), w = focus.diag * 0.06, dist = focus.diag * 0.045;
+  meta.cameras.forEach((c, i) => {
+    if (!c.image) return;
+    const tex = loader.load(`data/${state.id}/images/${c.image}`);
+    tex.colorSpace = THREE.SRGBColorSpace;
+    const m = new THREE.Mesh(new THREE.PlaneGeometry(w, (w * c.height) / c.width),
+      new THREE.MeshBasicMaterial({ map: tex, side: THREE.DoubleSide, transparent: true, opacity: 0.95 }));
+    const f = new THREE.Vector3(...c.forward), up = new THREE.Vector3(...c.up);
+    // Quad +z faces the camera (-forward), +y is the camera's up, so +x is forward x up.
+    m.matrix.makeBasis(new THREE.Vector3().crossVectors(f, up).normalize(), up.clone().normalize(), f.clone().negate());
+    m.matrix.setPosition(new THREE.Vector3(...c.position).addScaledVector(f, dist));
+    m.matrixAutoUpdate = false;
+    g.add(m);
+  });
+  state.photos = g; scene.add(g);
+}
+
+// ---------- legends ----------
+function renderLegend(mode, el) {
+  const { meta } = state; el.innerHTML = "";
   const swatch = (color, text) => { const d = document.createElement("div"); d.innerHTML = `<span class="sw" style="background:${color}"></span><span>${text}</span>`; return d; };
-  const box = document.createElement("div"); box.className = "legend";
-  if (state.mode === "structure") {
-    const counts = new Array(meta.labels.length).fill(0); data.label.forEach((l) => counts[l]++);
-    meta.labels.forEach((name, i) => box.append(swatch("#" + state.labelColors[i].getHexString(), `${name.replace(/_/g, " ")} <span class="muted">· ${counts[i]} points</span>`)));
-    el.append(box);
-    el.insertAdjacentHTML("beforeend", `<p class="muted">Labels come from planes fitted to the points. "object" means not close enough to any plane.</p>`);
-  } else if (state.mode === "confidence") {
-    el.insertAdjacentHTML("beforeend", `<div class="ramp" style="background:linear-gradient(90deg,${RAMP.join(",")})"></div><div class="ramp-labels"><span>low</span><span>high</span></div>
-      <p class="muted">How well a point fits its assigned label. A point on a plane scores high near the plane and falls off with distance; an "object" point scores higher the farther it is from every plane.</p>`);
-  } else if (state.mode === "instance") {
-    // Excluded groups always listed (they are the controller's catches), then the six largest others.
+  if (mode === "structure") {
+    el.innerHTML = `<p class="muted">Colours match the class list under Layers. Labels come from planes fitted to the points; "object" means not close enough to any plane.</p>`;
+  } else if (mode === "confidence") {
+    el.innerHTML = `<div class="ramp" style="background:linear-gradient(90deg,${RAMP.join(",")})"></div><div class="ramp-labels"><span>low</span><span>high</span></div>
+      <p class="muted">How well a point fits its assigned label. A point on a plane scores high near the plane and falls off with distance; an "object" point scores higher the farther it is from every plane.</p>`;
+  } else if (mode === "instance") {
+    // Excluded groups are always listed (they are the controller's catches), then the six largest others.
     const bySize = [...meta.instances].sort((a, b) => b.points - a.points);
     const rows = [...bySize.filter((r) => r.excluded), ...bySize.filter((r) => !r.excluded).slice(0, 6)];
     if (!rows.length) { el.innerHTML = `<p class="muted">No instance masks were computed for this scene.</p>`; return; }
+    const box = document.createElement("div"); box.className = "legend";
     rows.forEach((r) => box.append(swatch(r.excluded ? "#7a5a5a" : "#" + instanceColor(r.id).getHexString(), `instance ${r.id} <span class="muted">· ${r.points} points${r.excluded ? " · excluded by the extent gate (likely a false merge)" : ""}</span>`)));
     box.append(swatch("#3a424d", "no instance"));
     el.append(box);
@@ -278,10 +391,28 @@ function renderLegend() {
   }
 }
 
-const esc = (s) => String(s).replace(/[&<>]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;" }[c]));
+function refreshModes() {
+  document.querySelectorAll("#modes-a button").forEach((b) => b.setAttribute("aria-pressed", String(b.dataset.mode === state.modeA)));
+  document.querySelectorAll("#modes-b button").forEach((b) => b.setAttribute("aria-pressed", String(b.dataset.mode === state.modeB)));
+  $("lab-a").hidden = !state.compare; $("modes-b").hidden = $("legend-b").hidden = !state.compare;
+  renderLegend(state.modeA, $("legend-a")); renderLegend(state.modeB, $("legend-b"));
+  $("tag-a").textContent = "A · " + MODE_TITLES[state.modeA]; $("tag-b").textContent = "B · " + MODE_TITLES[state.modeB];
+}
+
+// ---------- panel ----------
 function renderPanel() {
   const m = state.meta;
   $("subtitle").textContent = `${SCENES.find((s) => s.id === m.name)?.title ?? m.name}: ${m.n_points.toLocaleString()} points, ${m.cameras.length} photos, camera model ${m.chosen_model}`;
+
+  const counts = new Array(m.labels.length).fill(0); state.data.label.forEach((l) => counts[l]++);
+  $("ly-classes").innerHTML = m.labels.map((name, i) =>
+    `<label class="check"><input type="checkbox" data-label="${i}" checked><span class="sw" style="background:#${state.labelColors[i].getHexString()}"></span>${esc(name.replace(/_/g, " "))} <span class="muted">· ${counts[i]}</span></label>`).join("");
+  $("ly-classes").querySelectorAll("input").forEach((c) => c.addEventListener("change", () => { state.labelOn[+c.dataset.label] = c.checked; applyLayers(); }));
+
+  $("grid").innerHTML = m.cameras.map((c, i) => c.image
+    ? `<button data-cam="${i}" aria-pressed="false" aria-label="Photo ${esc(c.name)}" title="${esc(c.name)}"><img loading="lazy" alt="" src="data/${state.id}/images/${c.image}"></button>` : "").join("");
+  $("grid").querySelectorAll("button").forEach((b) => b.addEventListener("click", () => selectCamera(+b.dataset.cam)));
+
   $("gates").innerHTML = m.gates.map((g) => `<div class="gate"><span class="badge ${g.status}">${g.status.toUpperCase()}</span><b>${esc(g.name.replace(/_/g, " "))}</b><div class="muted">${esc(g.message)}</div></div>`).join("") || `<p class="muted">No gates ran.</p>`;
   const rows = Object.entries(m.candidates).map(([name, c]) =>
     `<tr class="${name === m.chosen_model ? "chosen" : ""}"><td>${name}${name === m.chosen_model ? " ✓" : ""}</td><td>${c.n_points.toLocaleString()}</td><td>${c.reproj_px.toFixed(2)}</td><td>${c.plane_conf.toFixed(2)}</td></tr>`).join("");
@@ -290,18 +421,96 @@ function renderPanel() {
   $("scale").innerHTML = m.scale ? `<p>${m.scale.toFixed(4)} m per reconstruction unit.</p><p class="muted">Basis: ${esc(m.scale_basis)}.</p>` : `<p>No metric scale: distances are in reconstruction units.</p>`;
   $("log").innerHTML = m.decision_log.map((e) => `<li>${esc(e.observation)}${e.decision ? ` <b>→ ${esc(e.decision)}</b>` : ""}<div class="muted">${esc(e.step)}</div></li>`).join("");
   $("picked").innerHTML = `<span class="muted">Click a point to see what the pipeline inferred for it.</span>`;
+  refreshModes();
 }
 
-// Picking: click (not drag) selects the nearest point to the ray.
+// ---------- photos ----------
+function selectCamera(i) {
+  const { meta } = state, c = meta.cameras[i];
+  state.sel = i;
+  $("photo").hidden = false;
+  $("ph-name").textContent = c.name;
+  $("ph-img").alt = `Original photo ${c.name}`;
+  $("ph-img").src = c.image ? `data/${state.id}/images/${c.image}` : "";
+  $("ph-count").textContent = c.image ? "" : "No photo was exported for this camera.";
+  document.querySelectorAll("#grid button").forEach((b) => b.setAttribute("aria-pressed", String(+b.dataset.cam === i)));
+  document.querySelector(`#grid button[data-cam="${i}"]`)?.scrollIntoView({ block: "nearest" });
+  drawFrustum(i);
+  drawOverlay();
+}
+function closePhoto() {
+  state.sel = null; $("photo").hidden = true;
+  if (state.frustum) { scene.remove(state.frustum); disposeGroup(state.frustum); state.frustum = null; }
+  document.querySelectorAll("#grid button").forEach((b) => b.setAttribute("aria-pressed", "false"));
+}
+function drawFrustum(i) {
+  if (state.frustum) { scene.remove(state.frustum); disposeGroup(state.frustum); }
+  const c = state.meta.cameras[i], f = new THREE.Vector3(...c.forward), up = new THREE.Vector3(...c.up), p = new THREE.Vector3(...c.position);
+  const right = new THREE.Vector3().crossVectors(f, up).normalize(), d = state.focus.diag * 0.07;
+  const hh = (d * c.height) / (2 * c.focal_y), hw = (hh * c.width) / c.height;
+  const at = (sx, sy) => p.clone().addScaledVector(f, d).addScaledVector(right, sx * hw).addScaledVector(up, sy * hh);
+  const k = [at(-1, 1), at(1, 1), at(1, -1), at(-1, -1)];
+  const pts = [];
+  k.forEach((q, j) => { pts.push(p, q, q, k[(j + 1) % 4]); });
+  const g = new THREE.BufferGeometry().setFromPoints(pts);
+  const lines = new THREE.LineSegments(g, new THREE.LineBasicMaterial({ color: ACCENT }));
+  const dot = new THREE.Points(new THREE.BufferGeometry().setFromPoints([p]), new THREE.PointsMaterial({ color: ACCENT, size: 12, sizeAttenuation: false }));
+  state.frustum = new THREE.Group(); state.frustum.add(lines, dot); scene.add(state.frustum);
+}
+function viewFrom(i) {
+  // The photo quads sit a few decimetres in front of their cameras and would block this view.
+  if ($("ly-photos").checked) { $("ly-photos").checked = false; applyLayers(); }
+  const c = state.meta.cameras[i], p = new THREE.Vector3(...c.position), f = new THREE.Vector3(...c.forward);
+  camera.fov = THREE.MathUtils.radToDeg(2 * Math.atan(c.height / (2 * c.focal_y)));
+  camera.position.copy(p);
+  controls.target.copy(p).addScaledVector(f, state.focus.diag * 0.3);
+  camera.updateProjectionMatrix(); controls.update();
+}
+// Draw the model over the photo using the keypoints that were triangulated into 3D points.
+function drawOverlay() {
+  const img = $("ph-img"), cv = $("ph-ov");
+  if ($("photo").hidden || state.sel == null) return;
+  const w = img.clientWidth, h = img.clientHeight, dpr = window.devicePixelRatio || 1;
+  if (!w || !h) return;
+  cv.width = Math.round(w * dpr); cv.height = Math.round(h * dpr);
+  const ctx = cv.getContext("2d"); ctx.setTransform(dpr, 0, 0, dpr, 0, 0); ctx.clearRect(0, 0, w, h);
+  const mode = $("ph-mode").value, c = state.meta.cameras[state.sel];
+  if (mode === "none" || !c.image) return;
+  const { idx, u, v } = state.obs, col = new THREE.Color(), radius = c.obs_count > 1000 ? 1.8 : 3; let shown = 0;
+  for (let j = c.obs_offset; j < c.obs_offset + c.obs_count; j++) {
+    const i = idx[j];
+    if (!state.labelOn[state.data.label[i]]) continue;
+    colorFor(mode, i, col);
+    ctx.fillStyle = "#" + col.getHexString();
+    ctx.strokeStyle = "rgba(0,0,0,.6)"; ctx.lineWidth = 1;
+    ctx.beginPath(); ctx.arc(u[j] * w, v[j] * h, radius, 0, 6.2832); ctx.fill(); ctx.stroke();
+    shown++;
+  }
+  $("ph-count").textContent = `${shown} of ${c.obs_count} reconstructed points drawn`;
+}
+
+// ---------- picking ----------
 const ray = new THREE.Raycaster();
 let down = null;
 canvas.addEventListener("pointerdown", (e) => { down = [e.clientX, e.clientY]; });
 canvas.addEventListener("pointerup", (e) => {
-  if (!down || Math.hypot(e.clientX - down[0], e.clientY - down[1]) > 4 || !state.points) return;
-  const r = canvas.getBoundingClientRect();
-  ray.setFromCamera(new THREE.Vector2(((e.clientX - r.left) / r.width) * 2 - 1, -((e.clientY - r.top) / r.height) * 2 + 1), camera);
+  if (!down || Math.hypot(e.clientX - down[0], e.clientY - down[1]) > 4 || !state.pointsA) return;
+  const r = canvas.getBoundingClientRect(), px = e.clientX - r.left, py = e.clientY - r.top;
+  // A camera marker (or its photo) close to the click wins over the points behind it.
+  if ($("ly-cams").checked || $("ly-photos").checked) {
+    const v = new THREE.Vector3(); let best = null, bestD = 16;
+    state.meta.cameras.forEach((c, i) => {
+      v.set(...c.position).project(camera);
+      if (v.z > 1) return;
+      const d = Math.hypot((v.x * 0.5 + 0.5) * r.width - px, (-v.y * 0.5 + 0.5) * r.height - py);
+      if (d < bestD) { best = i; bestD = d; }
+    });
+    if (best != null) return selectCamera(best);
+  }
+  if (!$("ly-points").checked) return;
+  ray.setFromCamera(new THREE.Vector2((px / r.width) * 2 - 1, -(py / r.height) * 2 + 1), camera);
   ray.params.Points.threshold = state.focus.diag * 0.006;
-  const hit = ray.intersectObject(state.points)[0];
+  const hit = ray.intersectObject(state.pointsA).find((h) => state.labelOn[state.data.label[h.index]]);
   if (hit) showPoint(hit.index);
 });
 function showPoint(i) {
@@ -309,45 +518,97 @@ function showPoint(i) {
   const inst = meta.instances.find((x) => x.id === id), u = meta.unit === "m" ? "m" : "units";
   const p = [0, 1, 2].map((k) => data.xyz[i * 3 + k].toFixed(2)).join(", ");
   const kind = name === "object" ? `confidence that this is not part of a room surface: ${conf.toFixed(2)}` : `confidence it lies on ${name.replace(/_/g, " ")}: ${conf.toFixed(2)}`;
-  $("picked").innerHTML = `<div><span class="sw" style="display:inline-block;background:#${state.labelColors[data.label[i]].getHexString()}"></span> <b>${esc(name.replace(/_/g, " "))}</b></div>
+  $("picked").innerHTML = `<div><span class="sw" style="background:#${state.labelColors[data.label[i]].getHexString()}"></span> <b>${esc(name.replace(/_/g, " "))}</b></div>
     <div class="muted">${kind}</div>
     <div class="muted">${id >= 0 ? `instance ${id}, ${inst?.points ?? "?"} points${inst?.excluded ? " (excluded as a likely false merge)" : ""}` : "not in any instance"}</div>
     <div class="muted">position (${p}) ${u}, y is up from the floor</div>`;
 }
 
+// ---------- view ----------
 function resetView() {
   const f = state.focus;
+  camera.fov = 50;
   camera.position.copy(f.centre).add(new THREE.Vector3(0.9, 0.7, 1.2).normalize().multiplyScalar(f.diag * 1.1));
   camera.near = f.diag / 500; camera.far = f.diag * 20; camera.updateProjectionMatrix();
   controls.target.copy(f.centre); controls.update();
 }
-
 function resize() {
-  const r = canvas.parentElement.getBoundingClientRect();
+  const r = $("stage").getBoundingClientRect();
+  size.w = r.width; size.h = r.height;
   renderer.setSize(r.width, r.height, false);
   camera.aspect = r.width / r.height; camera.updateProjectionMatrix();
+  drawOverlay();
 }
 window.addEventListener("resize", resize);
 
-// Controls
+function render() {
+  const { pointsA: A, pointsB: B } = state, on = $("ly-points").checked;
+  if (!A) return;
+  if (!state.compare) {
+    renderer.setScissorTest(false); A.visible = on; B.visible = false;
+    renderer.render(scene, camera);
+    return;
+  }
+  // Same camera, same scene, two colourings: left of the divider shows A, right shows B.
+  const x = Math.round(size.w * state.split);
+  renderer.setViewport(0, 0, size.w, size.h); renderer.setScissorTest(true);
+  A.visible = on; B.visible = false; renderer.setScissor(0, 0, x, size.h); renderer.render(scene, camera);
+  A.visible = false; B.visible = on; renderer.setScissor(x, 0, size.w - x, size.h); renderer.render(scene, camera);
+  renderer.setScissorTest(false);
+}
+
+function setCompare(on) {
+  state.compare = on;
+  $("btn-compare").setAttribute("aria-pressed", String(on));
+  $("divider").style.display = on ? "block" : "none";
+  $("divider").style.left = state.split * 100 + "%";
+  refreshModes();
+}
+
+// ---------- controls ----------
 const sel = $("scene");
 SCENES.forEach((s) => sel.insertAdjacentHTML("beforeend", `<option value="${s.id}">${s.title}</option>`));
 sel.onchange = () => { history.replaceState(null, "", `?scene=${sel.value}`); load(sel.value).then(resize); };
-MODES.forEach((m) => {
-  const b = document.createElement("button"); b.textContent = m.title; b.dataset.mode = m.id;
-  b.setAttribute("aria-pressed", String(m.id === state.mode));
-  b.onclick = () => { state.mode = m.id; document.querySelectorAll("#modes button").forEach((x) => x.setAttribute("aria-pressed", String(x === b))); recolor(); };
-  $("modes").append(b);
-});
-const toggle = (id, key) => { const b = $(id); b.onclick = () => { const on = b.getAttribute("aria-pressed") !== "true"; b.setAttribute("aria-pressed", String(on)); if (state[key]) state[key].visible = on; }; };
-toggle("btn-planes", "planes"); toggle("btn-cams", "cams");
+for (const side of ["a", "b"]) {
+  Object.entries(MODE_TITLES).forEach(([id, title]) => {
+    const b = document.createElement("button"); b.textContent = title; b.dataset.mode = id;
+    b.onclick = () => {
+      if (side === "a") { state.modeA = id; paint(state.pointsA, id); } else { state.modeB = id; paint(state.pointsB, id); }
+      refreshModes();
+    };
+    $("modes-" + side).append(b);
+  });
+}
+["ly-points", "ly-planes", "ly-cams", "ly-photos"].forEach((id) => $(id).addEventListener("change", applyLayers));
+$("btn-compare").onclick = () => setCompare(!state.compare);
 $("btn-reset").onclick = resetView;
-$("size").oninput = () => { if (state.points) state.points.material.uniforms.size.value = +$("size").value; };
+$("size").oninput = () => { if (state.pointsA) state.pointsA.material.uniforms.size.value = +$("size").value; };
+$("ph-close").onclick = closePhoto;
+$("ph-prev").onclick = () => selectCamera((state.sel - 1 + state.meta.cameras.length) % state.meta.cameras.length);
+$("ph-next").onclick = () => selectCamera((state.sel + 1) % state.meta.cameras.length);
+$("ph-here").onclick = () => viewFrom(state.sel);
+$("ph-mode").onchange = drawOverlay;
+$("ph-img").addEventListener("load", drawOverlay);
+new ResizeObserver(drawOverlay).observe($("ph-img"));
+
+// Divider drag (pointer capture keeps the drag alive outside the handle).
+const handle = $("handle");
+const moveSplit = (clientX) => {
+  const r = $("stage").getBoundingClientRect();
+  state.split = Math.min(0.95, Math.max(0.05, (clientX - r.left) / r.width));
+  $("divider").style.left = state.split * 100 + "%";
+};
+handle.addEventListener("pointerdown", (e) => { handle.setPointerCapture(e.pointerId); handle.dataset.drag = "1"; });
+handle.addEventListener("pointermove", (e) => { if (handle.dataset.drag) moveSplit(e.clientX); });
+handle.addEventListener("pointerup", () => { delete handle.dataset.drag; });
+handle.addEventListener("keydown", (e) => {
+  if (e.key === "ArrowLeft" || e.key === "ArrowRight") { state.split = Math.min(0.95, Math.max(0.05, state.split + (e.key === "ArrowLeft" ? -0.03 : 0.03))); $("divider").style.left = state.split * 100 + "%"; }
+});
 
 const first = new URLSearchParams(location.search).get("scene");
 sel.value = SCENES.some((s) => s.id === first) ? first : SCENES[0].id;
 load(sel.value).then(resize).catch((e) => { $("status").textContent = "Could not load data: " + e.message + " (serve this folder over http, e.g. python -m http.server)"; });
-renderer.setAnimationLoop(() => { controls.update(); renderer.render(scene, camera); });
+renderer.setAnimationLoop(() => { controls.update(); render(); });
 </script>
 </body>
 </html>
