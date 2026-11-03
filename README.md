@@ -12,6 +12,9 @@ evaluated against laser scans from the ETH3D benchmark.
 > A static [web viewer](#viewer) shows the two test scenes with the pipeline's labels, confidences,
 > quality gates and decision log.
 
+**Live demo:** <https://zzyydtc.github.io/scene2twin/viewer/> (orbit with the mouse; click a photo or
+a camera to see the model drawn over it; Compare splits the view).
+
 ## What works and what did not
 
 | Area | Outcome |
