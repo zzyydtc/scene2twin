@@ -22,16 +22,18 @@ a camera to see the model drawn over it; Compare splits the view).
 | Camera-model choice | A rule that compares candidate models picked `OPENCV` on both test scenes, and `OPENCV` was the most accurate against the laser scan both times (median point error 0.84 cm and 1.52 cm). A single reprojection-error threshold would have accepted a wrong model on one scene (0.98 px) |
 | Room structure | Floor, ceiling and wall planes and per-point labels with a confidence that tracks accuracy (92% agreement at confidence 0.8 to 1.0, 33% below 0.5, on one scene) |
 | Instance lifting | SAM masks lifted to 3D by cross-view voting; separates keyboards, bags and whiteboards. Produces some room-sized false merges, which a gate catches |
-| Registration to a laser scan | **Did not work.** FPFH+RANSAC, Open3D's scaled pipeline and a room-axes method all failed to place the reconstruction. The room-axes method recovers orientation, not translation or scale |
+| Registration to a laser scan | FPFH+RANSAC, Open3D's scaled pipeline and a room-axes method all failed to place the reconstruction (Day 3). A later method, FFT correlation of occupancy grids restricted to the covered box plus point-to-plane ICP, placed all three tested reconstructions within 1 to 2 cm of the fit to the reference poses (baseline: 106 cm, 107 cm and 964 cm off); on the large scene it took 93 minutes |
 | Floor-plausibility gate | **Failed validation.** It gave the same value for a wrong floor and a correct one |
 | Metric scale | Cross-checking two tape measurements caught a bad one on both scenes; the final scale was within 3% and 0.3% of the reference |
+| Predicted precision | The precision a triangulation predicts for its own points is too optimistic (1.6 to 2.7 times too small, heavy tails), and COLMAP's reprojection error ranks real error barely better than a random order on one scene (Day 7) |
 
 Details, numbers and the bugs found along the way are in [`docs/`](docs/):
 [camera-model debug](docs/debug-day2-camera-model.md),
 [registration](docs/day3-registration.md),
 [semantics](docs/day4-semantics.md),
 [SAM lifting](docs/day4b-sam-lift.md),
-[controller and second scene](docs/day5-agent.md).
+[controller and second scene](docs/day5-agent.md),
+[registration by correlation and predicted-vs-observed precision](docs/day7-comparisons.md).
 
 Limits that apply to every number above: two scenes, one camera each, thresholds chosen after
 seeing the first scene, and no human-annotated semantics (the scan's own planes are the reference).
@@ -43,8 +45,8 @@ seeing the first scene, and no human-annotated semantics (the scan's own planes 
 | SfM (feature matching, incremental mapping, bundle adjustment) | COLMAP through `pycolmap` |
 | 2D instance masks | SAM ViT-B, pretrained, not trained here |
 | FPFH features, normal estimation, voxel filtering, DBSCAN, the library registration baseline | Open3D |
-| Sim(3) alignment (Umeyama), RANSAC over Sim(3), scale-bounded trimmed ICP, Manhattan-frame registration, occupancy-IoU ranking | written here (`registration/`) |
-| Pose, point-cloud and reprojection metrics; scan loading and alignment | written here (`eval/`) |
+| Sim(3) alignment (Umeyama), RANSAC over Sim(3), scale-bounded trimmed ICP, Manhattan-frame registration, occupancy-IoU ranking, FFT occupancy-grid correlation, point-to-plane ICP with scale | written here (`registration/`) |
+| Pose, point-cloud and reprojection metrics; scan loading and alignment; triangulation-covariance calibration against the scan | written here (`eval/`) |
 | Room axes, plane detection with camera-based roles, point labelling and confidence, scene graph, cross-view instance voting | written here (`semantics/`) |
 | Quality gates, camera-model comparison, tape cross-check, decision-logging controller | written here (`agent/`) |
 
@@ -53,12 +55,12 @@ The controller is a deterministic rule-based program; no language model is invol
 ## Layout
 
 ```
-eval/          metrics against ground truth, scan loading
-registration/  Sim(3), RANSAC, ICP, Manhattan frame, comparison harness
+eval/          metrics against ground truth, scan loading, precision calibration
+registration/  Sim(3), RANSAC, ICP, Manhattan frame, raster correlation, comparison harness
 semantics/     structure, scene graph, SAM lifting, evaluation against the scan
 agent/         quality gates and the controller
 scripts/       baseline reconstruction, viewer export
-tests/         unit tests (46)
+tests/         unit tests (56)
 docs/          debug logs and findings
 viewer/        static Three.js viewer and its exported data (viewer/data)
 data/          local only, git-ignored (datasets, model weights)
@@ -100,6 +102,12 @@ python -m semantics.evaluate --model outputs/office_agent/opencv/best \
 python -m semantics.run_sam --model outputs/office_agent/opencv/best \
     --images data/eth3d/office/images/dslr_images \
     --checkpoint data/models/sam_vit_b_01ec64.pth --out outputs/office_agent/sam
+
+# registration to the scan, baseline against the raster method (add --reg-voxel 0.1 for a large scene)
+python -m registration.compare --model outputs/office_agent/opencv/best --scene data/eth3d/office     --out outputs/compare/office.json --seeds 1 --methods ours_manhattan,ours_raster
+
+# predicted precision against observed error
+python -m eval.run_calibration --model outputs/office_agent/opencv/best --scene data/eth3d/office     --out outputs/calibration/office.json --figure docs/figures/office_calibration.png
 ```
 
 The tape values above were taken from the laser scan to simulate a measured room. For a real room

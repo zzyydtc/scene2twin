@@ -11,6 +11,8 @@ Strategies (all map the SfM points into the scan frame, scale unknown):
   ours           : registration.pipeline.register (own RANSAC and ICP).
   ours_manhattan : registration.manhattan.register_manhattan (room-axes coarse stage).
   ours_icp_only  : own ICP started from the oracle_centres transform.
+  ours_raster    : registration.raster.register_raster, scale searched freely.
+  ours_raster_prior : the same with the scale restricted to a measured value (--scale-prior).
 """
 import argparse
 import json
@@ -26,6 +28,7 @@ from eval.colmap_io import (
 )
 from eval.metrics import accuracy_completeness
 from registration.manhattan import register_manhattan
+from registration.raster import register_raster
 from registration.pipeline import (
     compose, fpfh, icp_sim3, inverse_similarity, normalise, register, similarity,
 )
@@ -99,9 +102,21 @@ def main() -> None:
     parser.add_argument("--out", type=Path, required=True)
     parser.add_argument("--voxel", type=float, default=0.06, help="normalised units")
     parser.add_argument("--seeds", type=int, default=5)
+    parser.add_argument("--methods", default="open3d_default,ours,ours_manhattan,ours_raster,ours_raster_prior",
+                        help="comma-separated subset of the randomised/global methods to run")
+    parser.add_argument("--reg-voxel", type=float,
+                        help="voxel size (m) of the scan copy the methods register to; scoring always uses the 2 cm scan")
+    parser.add_argument("--scale-prior", type=float, nargs=2, metavar=("SCALE", "TOL"),
+                        help="measured scale (metres per reconstruction unit) and its relative tolerance")
     args = parser.parse_args()
+    wanted = set(args.methods.split(","))
 
     scan = load_reference_scan(args.scene / "scan_clean", voxel=0.02)
+    reg_scan = scan
+    if args.reg_voxel:
+        reg_scan = np.asarray(
+            o3d.geometry.PointCloud(o3d.utility.Vector3dVector(scan)).voxel_down_sample(args.reg_voxel).points)
+        print(f"registration scan: {len(reg_scan)} of {len(scan)} points at {args.reg_voxel} m", flush=True)
     pts, _, _ = read_model_points(args.model)
     est_poses = read_model_poses(args.model)
     ref_poses = read_reference_poses(args.scene / "dslr_calibration_jpg" / "images.txt")
@@ -115,11 +130,18 @@ def main() -> None:
     refined = icp_sim3(pts, scan, oracle, max_dist=0.15)
     results["ours_icp_only"] = {**score(pts, scan, refined, centres), "seconds": time.perf_counter() - t0}
 
-    for name, fn in (
-        ("open3d_default", lambda s: open3d_default(pts, scan, args.voxel, s)),
-        ("ours", lambda s: register(pts, scan, voxel=args.voxel, seed=s).transform),
-        ("ours_manhattan", lambda s: register_manhattan(pts, scan, seed=s).transform),
-    ):
+    methods = [
+        ("open3d_default", lambda s: open3d_default(pts, reg_scan, args.voxel, s)),
+        ("ours", lambda s: register(pts, reg_scan, voxel=args.voxel, seed=s).transform),
+        ("ours_manhattan", lambda s: register_manhattan(pts, reg_scan, seed=s).transform),
+        ("ours_raster", lambda s: register_raster(pts, reg_scan, seed=s).transform),
+    ]
+    if args.scale_prior:
+        methods.append(("ours_raster_prior",
+                        lambda s: register_raster(pts, reg_scan, seed=s, scale_prior=tuple(args.scale_prior)).transform))
+    for name, fn in methods:
+        if name not in wanted:
+            continue
         runs = []
         for seed in range(args.seeds):
             t0 = time.perf_counter()
