@@ -80,6 +80,10 @@
   #divider .tag { position: absolute; top: 50%; margin-top: -58px; white-space: nowrap; pointer-events: none; font-size: 13px; }
   #divider .tag.l { right: 22px; } #divider .tag.r { left: 22px; }
 
+  .seg button[hidden], #ly-scan-wrap[hidden], #scan-opts[hidden], #comparisons-wrap[hidden] { display: none; }
+  #scan-opts select { max-width: 100%; margin-top: 4px; }
+  #comparisons button { margin: 2px 0 10px; }
+
   @media (max-width: 800px) {
     #app { grid-template-columns: 1fr; grid-template-rows: 55% 45%; }
     #panel { border-left: 0; border-top: 1px solid var(--line); }
@@ -141,6 +145,13 @@
     <label class="check"><input type="checkbox" id="ly-planes" checked> Room model: fitted planes</label>
     <label class="check"><input type="checkbox" id="ly-cams" checked> Camera positions</label>
     <label class="check"><input type="checkbox" id="ly-photos"> Photos placed in 3D</label>
+    <div id="ly-scan-wrap" hidden>
+      <label class="check"><input type="checkbox" id="ly-scan"> Laser scan (reference)</label>
+      <div class="sub" id="scan-opts" hidden>
+        <label class="muted">Aligned to the points by <select id="scan-align"></select></label>
+        <div class="muted" id="scan-info"></div>
+      </div>
+    </div>
 
     <h2>Point size</h2>
     <input type="range" id="size" min="1" max="10" step="0.5" value="3" aria-label="Point size">
@@ -164,8 +175,13 @@
     <h2>Decision log</h2>
     <details><summary>Every step the controller took, in order</summary><ol class="log" id="log"></ol></details>
 
+    <div id="comparisons-wrap" hidden>
+      <h2>Comparisons with the baseline</h2>
+      <div id="comparisons"></div>
+    </div>
+
     <h2>Read this first</h2>
-    <p class="note">Labels and confidences are inferences from the reconstructed points. They were checked against a laser scan on these two scenes only. Registering the reconstruction to that scan did not work, so no scan geometry is shown here.</p>
+    <p class="note">Labels and confidences are inferences from the reconstructed points. They were checked against a laser scan on these two scenes only. The scan is shown only after the reconstruction has been registered to it, which the Day 3 methods could not do; the method added since is listed under Comparisons.</p>
     <p class="note">Tape distances used for scale were taken from the laser scan to simulate measuring a real room.</p>
     <p class="note">The photo overlay shows only the keypoints that were triangulated into 3D points. "View from here" ignores lens distortion and levels the camera roll, so it is approximate.</p>
     <p class="muted">Points come from COLMAP structure-from-motion on ETH3D photos. Code and results: <a href="https://github.com/zzyydtc/scene2twin">scene2twin</a>. Photos and derived data: <a href="https://www.eth3d.net">ETH3D</a> (Schöps et al., CVPR 2017), <a href="https://creativecommons.org/licenses/by-nc-sa/4.0/">CC BY-NC-SA 4.0</a>.</p>
@@ -180,7 +196,7 @@ const SCENES = [
   { id: "office", title: "Office" },
   { id: "delivery_area", title: "Delivery area" },
 ];
-const MODE_TITLES = { rgb: "Photo colour", structure: "Structure", confidence: "Confidence", instance: "Instances" };
+const MODE_TITLES = { rgb: "Photo colour", structure: "Structure", confidence: "Confidence", instance: "Instances", sigma: "Predicted precision", err: "Observed error" };
 // Okabe-Ito based, readable on a dark background and for most colour-vision types.
 const WALLS = ["#009e73", "#56b4e9", "#f0e442", "#d55e00"];
 const ROLE_COLOR = { object: "#e69f00", floor: "#4a90d9", ceiling: "#cc79a7" };
@@ -201,9 +217,9 @@ controls.enableDamping = true;
 const state = {
   id: null, meta: null, data: null, obs: null, labelColors: [], labelOn: [], excluded: new Set(),
   modeA: "structure", modeB: "rgb", compare: false, split: 0.5, sel: null, focus: null,
-  pointsA: null, pointsB: null, planes: null, cams: null, photos: null, frustum: null,
+  pointsA: null, pointsB: null, planes: null, cams: null, photos: null, frustum: null, scan: null, scanLoading: false,
 };
-const GROUPS = ["pointsA", "pointsB", "planes", "cams", "photos", "frustum"];
+const GROUPS = ["pointsA", "pointsB", "planes", "cams", "photos", "frustum", "scan"];
 const size = { w: 1, h: 1 };
 
 // ---------- colour ----------
@@ -222,7 +238,11 @@ function colorFor(mode, i, c) {
   if (mode === "rgb") c.setRGB(data.rgb[i * 3] / 255, data.rgb[i * 3 + 1] / 255, data.rgb[i * 3 + 2] / 255, THREE.SRGBColorSpace);
   else if (mode === "structure") c.copy(state.labelColors[data.label[i]]);
   else if (mode === "confidence") c.copy(lerpColor(RAMP, data.conf[i] / 255));
-  else {
+  else if (mode === "sigma" || mode === "err") {
+    // One shared scale for both, so the two sides of Compare can be read against each other.
+    const v = mode === "sigma" ? data.sigma?.[i] : data.err?.[i];
+    if (v == null || Number.isNaN(v)) c.set("#3a424d"); else c.copy(lerpColor(RAMP, v / state.meta.calibration.cap_m));
+  } else {
     const id = data.inst[i];
     if (id < 0) c.set("#3a424d"); else if (state.excluded.has(id)) c.set("#7a5a5a"); else c.copy(instanceColor(id));
   }
@@ -251,6 +271,9 @@ async function load(id) {
     inst: await get("instances.i16", Int16Array),
   };
   state.obs = { idx: await get("obs_index.u32", Uint32Array), u: await get("obs_u.f32", Float32Array), v: await get("obs_v.f32", Float32Array) };
+  if (meta.calibration) {
+    state.data.sigma = await get("precision.f32", Float32Array); state.data.err = await get("error.f32", Float32Array);
+  }
   state.meta = meta;
   state.labelColors = labelColors(meta.labels);
   state.labelOn = meta.labels.map(() => true);
@@ -341,6 +364,9 @@ function applyLayers() {
   if (state.cams) state.cams.visible = on("ly-cams");
   if (on("ly-photos") && !state.photos) buildPhotos();
   if (state.photos) state.photos.visible = on("ly-photos");
+  if (on("ly-scan")) ensureScan();
+  if (state.scan) state.scan.visible = on("ly-scan");
+  $("scan-opts").hidden = !on("ly-scan");
   const vis = state.pointsA?.geometry.attributes.vis;
   if (vis) { state.data.label.forEach((l, i) => { vis.array[i] = state.labelOn[l] ? 1 : 0; }); vis.needsUpdate = true; }
   document.querySelectorAll("#ly-classes input").forEach((c) => { c.disabled = !on("ly-points"); });
@@ -386,6 +412,13 @@ function renderLegend(mode, el) {
     box.append(swatch("#3a424d", "no instance"));
     el.append(box);
     el.insertAdjacentHTML("beforeend", `<p class="muted">SAM masks lifted to 3D by cross-view voting. ${meta.instances.length} groups; excluded groups and the six largest others are listed.</p>`);
+  } else if (mode === "sigma" || mode === "err") {
+    const c = meta.calibration, mm = (v) => (v * 1000).toFixed(1);
+    el.innerHTML = `<div class="ramp" style="background:linear-gradient(90deg,${RAMP.join(",")})"></div><div class="ramp-labels"><span>0 mm</span><span>${mm(c.cap_m)} mm or more</span></div>
+      <p class="muted">${mode === "sigma"
+        ? `Precision the triangulation geometry predicts for each point (1 sigma along the scan surface normal, from ray angles and distances). Median ${mm(c.predicted_median_m)} mm.`
+        : `Distance from each point to the laser scan surface, after fitting the cameras to the reference poses. Median ${mm(c.observed_median_m)} mm, 95th percentile ${mm(c.observed_p95_m)} mm.`}
+        Same scale on both. Grey: not on the scan, so no reference.</p>`;
   } else {
     el.innerHTML = `<p class="muted">Original photo colour of each reconstructed point.</p>`;
   }
@@ -394,6 +427,9 @@ function renderLegend(mode, el) {
 function refreshModes() {
   document.querySelectorAll("#modes-a button").forEach((b) => b.setAttribute("aria-pressed", String(b.dataset.mode === state.modeA)));
   document.querySelectorAll("#modes-b button").forEach((b) => b.setAttribute("aria-pressed", String(b.dataset.mode === state.modeB)));
+  document.querySelectorAll("#modes-a button, #modes-b button").forEach((b) => {
+    if (b.dataset.mode === "sigma" || b.dataset.mode === "err") b.hidden = !state.meta?.calibration;
+  });
   $("lab-a").hidden = !state.compare; $("modes-b").hidden = $("legend-b").hidden = !state.compare;
   renderLegend(state.modeA, $("legend-a")); renderLegend(state.modeB, $("legend-b"));
   $("tag-a").textContent = "A · " + MODE_TITLES[state.modeA]; $("tag-b").textContent = "B · " + MODE_TITLES[state.modeB];
@@ -421,7 +457,67 @@ function renderPanel() {
   $("scale").innerHTML = m.scale ? `<p>${m.scale.toFixed(4)} m per reconstruction unit.</p><p class="muted">Basis: ${esc(m.scale_basis)}.</p>` : `<p>No metric scale: distances are in reconstruction units.</p>`;
   $("log").innerHTML = m.decision_log.map((e) => `<li>${esc(e.observation)}${e.decision ? ` <b>→ ${esc(e.decision)}</b>` : ""}<div class="muted">${esc(e.step)}</div></li>`).join("");
   $("picked").innerHTML = `<span class="muted">Click a point to see what the pipeline inferred for it.</span>`;
+  renderComparisons();
   refreshModes();
+}
+
+// ---------- laser scan and comparisons ----------
+async function ensureScan() {
+  if (state.scan || state.scanLoading || !state.meta.scan) return;
+  state.scanLoading = true;
+  const id = state.id;
+  const buf = await (await fetch(`data/${id}/scan.f32`)).arrayBuffer();
+  state.scanLoading = false;
+  if (state.id !== id || state.scan) return;
+  const g = new THREE.BufferGeometry();
+  g.setAttribute("position", new THREE.BufferAttribute(new Float32Array(buf), 3));
+  state.scan = new THREE.Points(g, new THREE.PointsMaterial({ color: 0x9db4cc, size: 1.8, sizeAttenuation: false, transparent: true, opacity: 0.55, depthWrite: false }));
+  state.scan.matrixAutoUpdate = false; state.scan.frustumCulled = false;
+  scene.add(state.scan);
+  placeScan();
+  applyLayers();
+}
+function placeScan() {
+  const p = state.meta.scan?.placements[+$("scan-align").value];
+  if (!p) return;
+  const cm = (v) => (v * 100 < 100 ? (v * 100).toFixed(1) + " cm" : (v).toFixed(2) + " m");
+  $("scan-info").innerHTML = `Camera positions end up ${cm(p.camera_rmse_m)} from the reference poses (RMS); ${(p.within_2cm * 100).toFixed(0)}% of the points lie within 2 cm of the scan. ${p.seconds ? `Computed in ${p.seconds < 120 ? p.seconds.toFixed(0) + " s" : (p.seconds / 60).toFixed(0) + " min"}.` : ""}`;
+  if (state.scan) { state.scan.matrix.set(...p.matrix); state.scan.matrixWorldNeedsUpdate = true; }
+}
+function showPrecisionComparison() {
+  state.modeA = "sigma"; state.modeB = "err";
+  paint(state.pointsA, "sigma"); paint(state.pointsB, "err");
+  setCompare(true);
+}
+function showScanComparison() {
+  $("ly-scan").checked = true;
+  const raster = state.meta.scan.placements.findIndex((q) => q.id === "raster");
+  $("scan-align").value = String(Math.max(raster, 0));
+  applyLayers(); placeScan();
+}
+function renderComparisons() {
+  const m = state.meta, c = m.calibration, sc = m.scan, el = $("comparisons");
+  $("comparisons-wrap").hidden = !(c || sc);
+  $("ly-scan-wrap").hidden = !sc;
+  if (sc) {
+    $("scan-align").innerHTML = sc.placements.map((q, i) => `<option value="${i}">${esc(q.label)}</option>`).join("");
+    const raster = sc.placements.findIndex((q) => q.id === "raster");
+    $("scan-align").value = String(Math.max(raster, 0));
+  }
+  let html = "";
+  if (sc) {
+    html += `<p><b>Registration to the laser scan.</b> The Day 3 methods could not place these points in the scan. Turn on the scan under Layers and switch what it is aligned by: the baseline leaves it a metre or more off, the new method puts it on the points.</p>
+      <button id="cmp-scan">Show the scan</button>`;
+  }
+  if (c) {
+    const r = c.observed_median_m / c.predicted_median_m;
+    html += `<p><b>Predicted against observed precision.</b> On ${c.n_on_scan.toLocaleString()} points that lie on the scan, the triangulation geometry predicts a median 1-sigma of ${(c.predicted_median_m * 1000).toFixed(1)} mm; the observed median distance to the scan is ${(c.observed_median_m * 1000).toFixed(1)} mm (${r.toFixed(1)} times larger), and only ${(c.coverage_raw["3sigma"] * 100).toFixed(0)}% of points fall within three predicted sigmas (a Gaussian would give 99.7%).</p>
+      <button id="cmp-precision">Compare predicted and observed</button>`;
+  }
+  html += `<p class="muted">Method, numbers and caveats: <a href="https://github.com/zzyydtc/scene2twin/blob/main/docs/day7-comparisons.md">docs/day7-comparisons.md</a>.</p>`;
+  el.innerHTML = html;
+  $("cmp-scan")?.addEventListener("click", showScanComparison);
+  $("cmp-precision")?.addEventListener("click", showPrecisionComparison);
 }
 
 // ---------- photos ----------
@@ -513,6 +609,12 @@ canvas.addEventListener("pointerup", (e) => {
   const hit = ray.intersectObject(state.pointsA).find((h) => state.labelOn[state.data.label[h.index]]);
   if (hit) showPoint(hit.index);
 });
+function precisionLine(i) {
+  const { data } = state;
+  if (!data.err) return "";
+  if (Number.isNaN(data.err[i])) return `<div class="muted">not on the laser scan: no reference error</div>`;
+  return `<div class="muted">predicted precision ${(data.sigma[i] * 1000).toFixed(1)} mm, observed distance to the scan ${(data.err[i] * 1000).toFixed(1)} mm</div>`;
+}
 function showPoint(i) {
   const { meta, data } = state, name = meta.labels[data.label[i]], conf = data.conf[i] / 255, id = data.inst[i];
   const inst = meta.instances.find((x) => x.id === id), u = meta.unit === "m" ? "m" : "units";
@@ -521,7 +623,7 @@ function showPoint(i) {
   $("picked").innerHTML = `<div><span class="sw" style="background:#${state.labelColors[data.label[i]].getHexString()}"></span> <b>${esc(name.replace(/_/g, " "))}</b></div>
     <div class="muted">${kind}</div>
     <div class="muted">${id >= 0 ? `instance ${id}, ${inst?.points ?? "?"} points${inst?.excluded ? " (excluded as a likely false merge)" : ""}` : "not in any instance"}</div>
-    <div class="muted">position (${p}) ${u}, y is up from the floor</div>`;
+    <div class="muted">position (${p}) ${u}, y is up from the floor</div>${precisionLine(i)}`;
 }
 
 // ---------- view ----------
@@ -579,7 +681,8 @@ for (const side of ["a", "b"]) {
     $("modes-" + side).append(b);
   });
 }
-["ly-points", "ly-planes", "ly-cams", "ly-photos"].forEach((id) => $(id).addEventListener("change", applyLayers));
+["ly-points", "ly-planes", "ly-cams", "ly-photos", "ly-scan"].forEach((id) => $(id).addEventListener("change", applyLayers));
+$("scan-align").onchange = placeScan;
 $("btn-compare").onclick = () => setCompare(!state.compare);
 $("btn-reset").onclick = resetView;
 $("size").oninput = () => { if (state.pointsA) state.pointsA.material.uniforms.size.value = +$("size").value; };

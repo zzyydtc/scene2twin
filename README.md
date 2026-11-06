@@ -107,7 +107,8 @@ python -m semantics.run_sam --model outputs/office_agent/opencv/best \
 python -m registration.compare --model outputs/office_agent/opencv/best --scene data/eth3d/office     --out outputs/compare/office.json --seeds 1 --methods ours_manhattan,ours_raster
 
 # predicted precision against observed error
-python -m eval.run_calibration --model outputs/office_agent/opencv/best --scene data/eth3d/office     --out outputs/calibration/office.json --figure docs/figures/office_calibration.png
+python -m eval.run_calibration --model outputs/office_agent/opencv/best --scene data/eth3d/office \
+    --out outputs/calibration/office.json --figure docs/figures/office_calibration.png
 ```
 
 The tape values above were taken from the laser scan to simulate a measured room. For a real room
@@ -116,9 +117,13 @@ they are distances measured with a tape between the walls or floor and ceiling.
 ## Viewer
 
 `viewer/index.html` is a static page (Three.js from a CDN, no build step). It shows the
-reconstruction only; the laser scan is not shown because registration to it did not work.
+reconstruction, and optionally the laser scan once the reconstruction has been registered to it.
 
-- **Colouring:** photo colour, structure label, label confidence or SAM instance.
+- **Colouring:** photo colour, structure label, label confidence, SAM instance, the precision each
+  point's triangulation geometry predicts, or its observed distance to the laser scan (Day 7).
+- **Laser scan (Day 7):** a layer showing the scan around the reconstruction, with a switch for
+  which registration places it: the new occupancy-grid method or the Day 3 room-axes baseline, with
+  the camera error each leaves. The scan is thinned to at most 100,000 points and loaded on demand.
 - **Layers (checkboxes):** the points, each structure class on its own, the fitted room planes,
   camera positions, and the photos placed in 3D at their cameras.
 - **Compare:** splits the view with a draggable divider and colours the left and right sides
@@ -139,12 +144,18 @@ python -m scripts.export_viewer --report outputs/office_agent/report.json --name
 python -m scripts.export_viewer --report outputs/delivery_agent/report.json --name delivery_area \
     --images data/eth3d/delivery_area/images/dslr_images
 
+# Day 7 data (predicted and observed precision, the scan placed by two registrations): add
+#   --scene data/eth3d/office --placement raster:outputs/placement/office.json:ours_raster_prior \
+#   --placement baseline:outputs/placement/office.json:ours_manhattan
+# to the commands above. registration.compare writes the transforms into its JSON.
+
 # serve the repo root and open http://localhost:8000/viewer/
 python -m http.server 8000
 ```
 
-`viewer/data` holds a sparse reconstruction and 800 px copies of the ETH3D photos (about 5 MB for
-both scenes). It is derived from ETH3D data and is licensed under CC BY-NC-SA 4.0, not the MIT
+`viewer/data` holds a sparse reconstruction and 800 px copies of the ETH3D photos and, for the Day 7
+comparisons, per-point precision and error plus a thinned copy of the laser scan around each
+reconstruction (about 8 MB for both scenes). It is derived from ETH3D data and is licensed under CC BY-NC-SA 4.0, not the MIT
 licence of the code; see [viewer/data/LICENSE](viewer/data/LICENSE).
 
 ## License

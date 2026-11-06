@@ -138,3 +138,20 @@ Limits: two scenes and one model each; the error includes the fit error of the S
 model into the scan frame; the scan's own noise (a few millimetres) is not subtracted; `sigma_px` is
 estimated from the same data it is used on. Nothing here changes the pipeline: these predictors are
 not used in the labels, confidences or gates yet.
+
+## In the viewer
+
+Both comparisons can be inspected in the [demo](https://zzyydtc.github.io/scene2twin/viewer/) (data
+exported with `scripts/export_viewer.py --scene ... --placement ...`):
+
+- **Colour by Predicted precision or Observed error** (same scale on both), best used with Compare:
+  the left side shows the sigma the geometry predicts, the right side the distance to the scan.
+  Points off the scan are grey. Clicking a point shows both numbers.
+- **Laser scan layer**, thinned to at most 100,000 points around the reconstruction, with a switch
+  for which registration aligns it to the points. The scan moves, the points and cameras do not, so
+  the photo overlay and picking are unaffected; the relative placement is the same either way. The
+  panel shows each method's camera error (office 0.9 cm against 1.08 m, `delivery_area` 2.0 cm against
+  9.64 m).
+- The run time shown for the `delivery_area` raster result (93 min) is from the first run. The rerun that
+  saved the transform for the viewer gave the same result but a wall-clock figure of 8.7 hours, most
+  likely because the computer was asleep for part of it; that figure is not used.

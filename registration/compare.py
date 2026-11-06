@@ -146,7 +146,12 @@ def main() -> None:
         for seed in range(args.seeds):
             t0 = time.perf_counter()
             try:
-                runs.append({**score(pts, scan, fn(seed), centres), "seconds": time.perf_counter() - t0})
+                found = fn(seed)
+                runs.append({
+                    **score(pts, scan, found, centres), "seconds": time.perf_counter() - t0,
+                    "transform": {"scale": found.scale, "rotation": found.rotation.tolist(),
+                                  "translation": found.translation.tolist()},
+                })
             except Exception as exc:  # report a failed run instead of hiding it
                 runs.append({"error": str(exc)})
         results[name] = runs
