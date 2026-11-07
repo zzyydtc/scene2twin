@@ -51,6 +51,8 @@ def main() -> None:
     parser.add_argument("--models", nargs="+", default=MODEL_ORDER)
     parser.add_argument("--tape", action="append", default=[], help="dimension=metres, e.g. height=2.7")
     parser.add_argument("--instance-labels", type=Path, help="instance_labels.npy from semantics.run_sam")
+    parser.add_argument("--refine-principal-point", action="store_true",
+                        help="let bundle adjustment refine the principal point (off by default, as in COLMAP)")
     parser.add_argument("--no-reuse", action="store_true", help="recompute cached reconstructions")
     args = parser.parse_args()
     args.out.mkdir(parents=True, exist_ok=True)
@@ -59,7 +61,8 @@ def main() -> None:
     # 1. Reconstruct with each candidate camera model and measure it.
     candidates = {}
     for name in args.models:
-        info = reconstruct(args.images, args.out / name.lower(), name, reuse=not args.no_reuse)
+        info = reconstruct(args.images, args.out / name.lower(), name, reuse=not args.no_reuse,
+                           refine_principal_point=args.refine_principal_point)
         reg = gate_registration(info["n_registered"], info["n_images"], info["n_models"] or 1)
         info["registered_ok"] = reg.status == "pass"
         if info["registered_ok"]:

@@ -4,11 +4,13 @@ from pathlib import Path
 import pycolmap
 
 
-def reconstruct(images: Path, out: Path, camera_model: str, reuse: bool = True) -> dict:
+def reconstruct(images: Path, out: Path, camera_model: str, reuse: bool = True, refine_principal_point: bool = False) -> dict:
     """Run COLMAP SfM with one camera model and keep the largest model in ``out/best``.
 
     Returns image and point counts and the mean reprojection error. With ``reuse`` an
-    existing ``out/best`` is loaded instead of recomputed.
+    existing ``out/best`` is loaded instead of recomputed. ``refine_principal_point`` lets bundle
+    adjustment move the principal point (COLMAP keeps it at the image centre by default); it is
+    not part of the cache key, so use a separate ``out`` folder for each setting.
     """
     best = out / "best"
     n_images = len([p for p in Path(images).iterdir() if p.suffix.lower() in (".jpg", ".jpeg", ".png")])
@@ -28,7 +30,9 @@ def reconstruct(images: Path, out: Path, camera_model: str, reuse: bool = True) 
             database, images, camera_mode=pycolmap.CameraMode.SINGLE, reader_options=reader
         )
         pycolmap.match_exhaustive(database)
-        maps = pycolmap.incremental_mapping(database, images, sparse)
+        options = pycolmap.IncrementalPipelineOptions()
+        options.ba_refine_principal_point = refine_principal_point
+        maps = pycolmap.incremental_mapping(database, images, sparse, options)
         if not maps:
             return {"camera_model": camera_model, "path": None, "n_images": n_images,
                     "n_registered": 0, "n_models": 0, "n_points": 0, "reproj_px": float("inf")}
@@ -39,6 +43,7 @@ def reconstruct(images: Path, out: Path, camera_model: str, reuse: bool = True) 
         n_models = len(maps)
     return {
         "camera_model": camera_model, "path": str(best), "n_images": n_images,
+        "refine_principal_point": refine_principal_point,
         "n_registered": rec.num_reg_images(), "n_models": n_models,
         "n_points": rec.num_points3D(),
         "reproj_px": float(rec.compute_mean_reprojection_error()),

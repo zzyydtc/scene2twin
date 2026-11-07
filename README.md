@@ -25,6 +25,7 @@ a camera to see the model drawn over it; Compare splits the view).
 | Registration to a laser scan | FPFH+RANSAC, Open3D's scaled pipeline and a room-axes method all failed to place the reconstruction (Day 3). A later method, FFT correlation of occupancy grids restricted to the covered box plus point-to-plane ICP, placed all three tested reconstructions within 1 to 2 cm of the fit to the reference poses (baseline: 106 cm, 107 cm and 964 cm off); on the large scene it took 93 minutes |
 | Floor-plausibility gate | **Failed validation.** It gave the same value for a wrong floor and a correct one |
 | Metric scale | Cross-checking two tape measurements caught a bad one on both scenes; the final scale was within 3% and 0.3% of the reference |
+| SfM engine | COLMAP's global mapper matched the incremental mapper on `office` (0.73 against 0.74 cm camera error, about 1.8 times faster) but **failed with its defaults on `delivery_area`** (283 cm, two correct halves rotated 167 degrees against each other, with a normal-looking reprojection error); a reference-free filter that drops image pairs whose rotation loops do not close repairs it (2.1 cm, still worse than incremental's 1.44 cm). Letting the principal point be refined helped more than the engine choice: incremental 1.44 to 0.33 cm on `delivery_area`, 0.74 to 0.45 cm on `office`; the controller has it as an opt-in flag (`--refine-principal-point`) because it also flipped a gate decision on `delivery_area` (Day 8) |
 | Predicted precision | The precision a triangulation predicts for its own points is too optimistic (1.6 to 2.7 times too small, heavy tails), and COLMAP's reprojection error ranks real error barely better than a random order on one scene (Day 7) |
 
 Details, numbers and the bugs found along the way are in [`docs/`](docs/):
@@ -33,7 +34,8 @@ Details, numbers and the bugs found along the way are in [`docs/`](docs/):
 [semantics](docs/day4-semantics.md),
 [SAM lifting](docs/day4b-sam-lift.md),
 [controller and second scene](docs/day5-agent.md),
-[registration by correlation and predicted-vs-observed precision](docs/day7-comparisons.md).
+[registration by correlation and predicted-vs-observed precision](docs/day7-comparisons.md),
+[incremental against global SfM](docs/day8-sfm-engines.md).
 
 Limits that apply to every number above: two scenes, one camera each, thresholds chosen after
 seeing the first scene, and no human-annotated semantics (the scan's own planes are the reference).
@@ -55,12 +57,13 @@ The controller is a deterministic rule-based program; no language model is invol
 ## Layout
 
 ```
-eval/          metrics against ground truth, scan loading, precision calibration
+eval/          metrics against ground truth, scan loading, precision calibration, SfM engine comparison
 registration/  Sim(3), RANSAC, ICP, Manhattan frame, raster correlation, comparison harness
+sfm/           view-graph filter for global SfM
 semantics/     structure, scene graph, SAM lifting, evaluation against the scan
 agent/         quality gates and the controller
 scripts/       baseline reconstruction, viewer export
-tests/         unit tests (56)
+tests/         unit tests (69)
 docs/          debug logs and findings
 viewer/        static Three.js viewer and its exported data (viewer/data)
 data/          local only, git-ignored (datasets, model weights)
@@ -104,7 +107,13 @@ python -m semantics.run_sam --model outputs/office_agent/opencv/best \
     --checkpoint data/models/sam_vit_b_01ec64.pth --out outputs/office_agent/sam
 
 # registration to the scan, baseline against the raster method (add --reg-voxel 0.1 for a large scene)
-python -m registration.compare --model outputs/office_agent/opencv/best --scene data/eth3d/office     --out outputs/compare/office.json --seeds 1 --methods ours_manhattan,ours_raster
+python -m registration.compare --model outputs/office_agent/opencv/best --scene data/eth3d/office \
+    --out outputs/compare/office.json --seeds 1 --methods ours_manhattan,ours_raster
+
+# incremental against global SfM on the controller's matches
+python -m eval.compare_sfm --database outputs/office_agent/opencv/database.db \
+    --images data/eth3d/office/images/dslr_images --scene data/eth3d/office --out outputs/sfm_engines/office
+# engines: incremental, global, global_filtered; add --refine-principal-point to let all refine it
 
 # predicted precision against observed error
 python -m eval.run_calibration --model outputs/office_agent/opencv/best --scene data/eth3d/office \
