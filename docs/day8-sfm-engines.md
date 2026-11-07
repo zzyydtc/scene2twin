@@ -103,29 +103,31 @@ for both engines, one seed each. Camera RMSE in cm (images registered when not a
 A fixed match threshold removes weak pairs, but the weak pairs are not the whole story and a threshold
 costs images when set high (`office` at 100). Two checks first, then a filter that uses no reference.
 
-**The cause, tested directly.** Using the reference poses, each verified pair was scored by how many of
-its inlier matches lie within 3 px of the epipolar line the reference poses predict. Of 385 pairs, 110
-fail (fewer than half within 3 px): 78% of the pairs with 15 to 29 inliers, 68% with 30 to 49, 6% with
-50 to 99 and 14% with 100 or more. Then, with the default threshold of 15, one seed each:
+**The cause, tested directly.** Using the reference poses and the reference camera calibration, each
+verified pair was scored by how many of its inlier matches lie within 3 px of the epipolar line the
+reference predicts. Of 385 pairs, 69 fail (fewer than half within 3 px): 72% of the pairs with 15 to 29
+inliers (43 of 60), 65% with 30 to 49 (26 of 40), and none of the 285 pairs with 50 or more. Removing
+all 69 before global mapping, with the default threshold of 15 and three seeds, gives 2.29 to 2.30 cm
+with all 44 images registered, against 283 cm with none removed. (This uses the reference, so it is a
+diagnosis, not a method.)
 
-| Pairs removed from the database before global mapping | Camera RMSE |
-|---|---|
-| none | 283 cm |
-| only the 74 wrong pairs with fewer than 50 inliers | **2.3 cm, 44 images** |
-| only the 36 wrong pairs with 50 or more inliers | 280 cm |
-| all 110 wrong pairs | 1.4 cm, but only 40 images in the largest model |
-
-So the weak wrong pairs are the cause, and the strong ones do not matter for this failure. (This
-uses the reference, so it is a diagnosis, not a method.)
+*Correction (Day 9).* An earlier version of this section scored the pairs with the camera that COLMAP
+estimates, whose principal point is fixed at the image centre. The reference principal point is 13 px
+from the centre on this scene, and that error alone labelled 42 fine pairs as wrong (36 of them strong ones) and missed 1; it
+also gave a different removal table (including "only the strong wrong pairs: 280 cm", which tested pairs
+that are in fact fine). Those numbers are withdrawn. The conclusion that weak wrong pairs cause the
+failure stands, and is now cleaner: every wrong pair is weak.
 
 **A filter that needs no reference** (`sfm/view_graph.py`, tests in `tests/test_view_graph.py`). Each
 pair's relative rotation is estimated from its inlier matches with RANSAC and the focal length COLMAP
 started from. For two images paired with a third, the three rotations around the loop must multiply
 to the identity; a pair is dropped when fewer than half of the loops through it close within 10
-degrees. On `delivery_area` this drops 104 of 385 pairs. Judged by the reference-based labels above (the
-filter never sees them), it removes 71 of the 74 wrong pairs with fewer than 50 inliers, 1 of the 36
-wrong pairs with more, and also 32 pairs that were fine (24 strong, 8 weak). On `office` it drops 22
-pairs and costs no image.
+degrees. On `delivery_area` this drops about 100 of 385 pairs (102 in the run checked against the
+labels; the RANSAC is random). Judged by the corrected reference-based labels above (the filter never
+sees them), it removes 68 of the 69 wrong pairs and also 34 pairs that were fine. On `office` it drops
+22 pairs and costs no image. Its 2.11 cm on `delivery_area` (table below) is about what removing exactly
+the wrong pairs gives (2.29 cm), so the remaining gap to the incremental mapper is the global mapper
+itself, not leftover bad pairs.
 
 `global_filtered` in `eval.compare_sfm` is this filter, then the global mapper, then one more bundle
 adjustment (the incremental mapper ends the same way). Three seeds each, default minimum of 15 matches:
@@ -168,9 +170,11 @@ bundle adjustment) changes much more than the choice of engine does:
 - With it, the filtered global mapper is within 0.25 cm of the incremental one on `delivery_area` (0.56
   against 0.33 cm) and equal on `office` (0.43 against 0.45 cm). The unfiltered global mapper still
   fails on `delivery_area` (283 cm), so the filter is what repairs it.
-- This is two scenes with one camera each. The cause is not isolated: a refined principal point can
-  absorb a real decentring of the lens or a systematic error elsewhere (a fixed-intrinsics model that
-  is slightly wrong), and I did not separate the two.
+- **The refined principal point is the real one.** The ETH3D calibration puts the principal point at
+  (3040.2, 2010.2) on `office` and (3036.9, 2012.7) on `delivery_area`, 17 px and 13 px from the image
+  centre (3024, 2016) that the baseline fixes. The refined values land within 4 px (3043.9, 2013.6) and
+  1 px (3037.8, 2012.0) of the reference. So the gain is not the refinement absorbing some other
+  error: the baseline fixed a value that was wrong by 13 to 17 px. (Two scenes, one camera each.)
 
 ## Trying it in the controller
 
@@ -223,8 +227,9 @@ what the gates decide on `delivery_area`, and two scenes are not enough to settl
   independent reference, or a check that the camera graph is rotation-consistent, shows it. The
   incremental mapper succeeded on both scenes with the defaults. As in Day 2, the reprojection
   error alone does not tell a good model from a wrong one.
-- **The principal point matters more than the engine.** It is available in the controller as an opt-in
-  option; it improves poses on both scenes and changes one gate decision, so it is not the default yet.
+- **The principal point matters more than the engine.** The baseline fixes it 13 to 17 px from the
+  reference; the refined value is within 4 px. It is available in the controller as an opt-in option;
+  it improves poses on both scenes and changes one gate decision, so it is not the default yet.
 
 ## Limits
 

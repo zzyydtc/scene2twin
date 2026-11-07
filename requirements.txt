@@ -10,3 +10,4 @@ pytest
 py7zr
 segment-anything
 # torch and torchvision are installed separately, see README (CUDA build must match your driver).
+kornia
