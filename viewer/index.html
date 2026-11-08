@@ -83,6 +83,13 @@
   .seg button[hidden], #ly-scan-wrap[hidden], #scan-opts[hidden], #comparisons-wrap[hidden] { display: none; }
   #scan-opts select { max-width: 100%; margin-top: 4px; }
   #comparisons button { margin: 2px 0 10px; }
+  #methods-wrap[hidden] { display: none; }
+  #methods tr[data-m] { cursor: pointer; }
+  #methods tr[data-m]:hover td { background: var(--panel-2); }
+  #methods tr[data-m]:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; }
+  #methods tr[aria-pressed="true"] td { color: var(--accent); font-weight: 600; }
+  #method-info { margin-top: 8px; }
+  #method-info .worst { font-size: 13px; }
 
   @media (max-width: 800px) {
     #app { grid-template-columns: 1fr; grid-template-rows: 55% 45%; }
@@ -180,6 +187,17 @@
       <div id="comparisons"></div>
     </div>
 
+    <div id="methods-wrap" hidden>
+      <h2>Reconstruction front ends compared</h2>
+      <p class="muted">The same photos reconstructed by different methods (Days 8 to 11). Pick a row to draw that method's cameras against the dataset's reference cameras: dots are coloured by position error, a line joins each camera to its reference position, and the short ticks show where it points.</p>
+      <div id="methods"></div>
+      <div id="method-info"></div>
+      <label class="check"><input type="checkbox" id="ly-trim"> Fit on the best 80% of cameras only</label>
+      <p class="muted">By default the fit uses every camera, so a few badly placed ones make all the others look off too. Picking the best 80% needs the reference poses, which a user without a reference would not have.</p>
+      <label class="check"><input type="checkbox" id="ly-hard"> Ring the image group that is hard for most methods</label>
+      <p class="muted">Method, numbers and caveats: <a href="https://github.com/zzyydtc/scene2twin/blob/main/docs/day8-sfm-engines.md">Day 8</a>, <a href="https://github.com/zzyydtc/scene2twin/blob/main/docs/day9-learned-matching.md">Day 9</a>, <a href="https://github.com/zzyydtc/scene2twin/blob/main/docs/day10-vggt.md">Day 10</a>, <a href="https://github.com/zzyydtc/scene2twin/blob/main/docs/day11-mast3r.md">Day 11</a>.</p>
+    </div>
+
     <h2>Read this first</h2>
     <p class="note">Labels and confidences are inferences from the reconstructed points. They were checked against a laser scan on these two scenes only. The scan is shown only after the reconstruction has been registered to it, which the Day 3 methods could not do; the method added since is listed under Comparisons.</p>
     <p class="note">Tape distances used for scale were taken from the laser scan to simulate measuring a real room.</p>
@@ -218,8 +236,11 @@ const state = {
   id: null, meta: null, data: null, obs: null, labelColors: [], labelOn: [], excluded: new Set(),
   modeA: "structure", modeB: "rgb", compare: false, split: 0.5, sel: null, focus: null,
   pointsA: null, pointsB: null, planes: null, cams: null, photos: null, frustum: null, scan: null, scanLoading: false,
+  methods: null, method: null, methodGroup: null,
 };
-const GROUPS = ["pointsA", "pointsB", "planes", "cams", "photos", "frustum", "scan"];
+const GROUPS = ["pointsA", "pointsB", "planes", "cams", "photos", "frustum", "scan", "methodGroup"];
+// Image groups that most front ends placed worst (docs/day9, day10, day11).
+const HARD_GROUPS = { office: ["DSC_0237.JPG", "DSC_0238.JPG", "DSC_0239.JPG", "DSC_0240.JPG", "DSC_0241.JPG"], delivery_area: ["DSC_0711.JPG", "DSC_0712.JPG", "DSC_0713.JPG", "DSC_0714.JPG"] };
 const size = { w: 1, h: 1 };
 
 // ---------- colour ----------
@@ -275,6 +296,9 @@ async function load(id) {
     state.data.sigma = await get("precision.f32", Float32Array); state.data.err = await get("error.f32", Float32Array);
   }
   state.meta = meta;
+  state.methods = await fetch(base + "methods.json").then((r) => (r.ok ? r.json() : null)).catch(() => null);
+  state.method = null;
+  (state.hidden ?? []).forEach((k) => { $(k).checked = true; }); state.hidden = null; // layers a method view had switched off
   state.labelColors = labelColors(meta.labels);
   state.labelOn = meta.labels.map(() => true);
   state.excluded = new Set(meta.instances.filter((x) => x.excluded).map((x) => x.id));
@@ -361,7 +385,9 @@ function build() {
 function applyLayers() {
   const on = (id) => $(id).checked;
   if (state.planes) state.planes.visible = on("ly-planes");
-  if (state.cams) state.cams.visible = on("ly-cams");
+  if (state.cams) state.cams.visible = on("ly-cams") && !state.method;
+  const hard = state.methodGroup?.getObjectByName("hard");
+  if (hard) hard.visible = on("ly-hard");
   if (on("ly-photos") && !state.photos) buildPhotos();
   if (state.photos) state.photos.visible = on("ly-photos");
   if (on("ly-scan")) ensureScan();
@@ -458,6 +484,7 @@ function renderPanel() {
   $("log").innerHTML = m.decision_log.map((e) => `<li>${esc(e.observation)}${e.decision ? ` <b>→ ${esc(e.decision)}</b>` : ""}<div class="muted">${esc(e.step)}</div></li>`).join("");
   $("picked").innerHTML = `<span class="muted">Click a point to see what the pipeline inferred for it.</span>`;
   renderComparisons();
+  renderMethods();
   refreshModes();
 }
 
@@ -518,6 +545,100 @@ function renderComparisons() {
   el.innerHTML = html;
   $("cmp-scan")?.addEventListener("click", showScanComparison);
   $("cmp-precision")?.addEventListener("click", showPrecisionComparison);
+}
+
+// ---------- reconstruction methods ----------
+const ERR_LO = 0.005, ERR_HI = 1.0; // metres: the colour ramp is logarithmic between these
+const errColor = (m) => lerpColor(RAMP, Math.log(Math.max(m, ERR_LO) / ERR_LO) / Math.log(ERR_HI / ERR_LO));
+const lengthText = (m) => (m < 1 ? `${(m * 100).toFixed(m < 0.1 ? 2 : 1)} cm` : `${m.toFixed(2)} m`);
+function renderMethods() {
+  const mt = state.methods;
+  $("methods-wrap").hidden = !mt;
+  if (!mt) return;
+  const rows = mt.methods.map((m) =>
+    `<tr data-m="${m.id}" tabindex="0" role="button" aria-pressed="${m.id === state.method}"><td>${esc(m.label)}</td><td>${m.n_registered}/${m.n_images}</td><td>${lengthText(m.camera_rmse_m)}</td><td>${m.rotation_median_deg.toFixed(1)}&deg;</td></tr>`).join("");
+  $("methods").innerHTML = `<table><tr><th>Method</th><th>Cameras</th><th>Position RMSE</th><th>Rotation (median)</th></tr>${rows}</table>`;
+  $("methods").querySelectorAll("tr[data-m]").forEach((tr) => {
+    const pick = () => showMethod(state.method === tr.dataset.m ? null : tr.dataset.m);
+    tr.addEventListener("click", pick);
+    tr.addEventListener("keydown", (e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); pick(); } });
+  });
+  const m = mt.methods.find((x) => x.id === state.method);
+  if (!m) { $("method-info").innerHTML = `<p class="muted">No method selected: the view shows the controller's own cameras.</p>`; return; }
+  const trim = $("ly-trim").checked && m.trimmed, cams = trim ? m.trimmed.cameras : m.cameras;
+  const worst = [...cams].sort((a, b) => b.error_m - a.error_m).slice(0, 3);
+  const sorted = cams.map((c) => c.error_m).sort((a, b) => a - b), median = sorted[Math.floor((sorted.length - 1) / 2)];
+  const missing = Object.keys(mt.reference).filter((n) => !m.cameras.some((c) => c.name === n));
+  const rest = cams.length - (trim ? m.trimmed.n_fitted : cams.length);
+  $("method-info").innerHTML = `
+    <p><b>${esc(m.label)}.</b> ${esc(m.note)}</p>
+    ${trim ? `<p class="worst">Fitted on the best ${m.trimmed.n_fitted} of ${cams.length} cameras (position RMSE ${lengthText(m.trimmed.fit_rmse_m)} on those). The other ${rest} are off by a median of ${lengthText(m.trimmed.rest_median_m)}.</p>` : ""}
+    <p class="worst">Largest position errors: ${worst.map((c) => `${esc(c.name.replace(".JPG", ""))} ${lengthText(c.error_m)}`).join(", ")}. Median ${lengthText(median)}, largest rotation error ${Math.max(...cams.map((c) => c.rotation_error_deg)).toFixed(1)}&deg;.</p>
+    ${missing.length ? `<p class="worst">Not registered (orange): ${missing.map((n) => esc(n.replace(".JPG", ""))).join(", ")}.</p>` : ""}
+    <div class="ramp" style="background:linear-gradient(90deg,${RAMP.join(",")})"></div>
+    <div class="ramp-labels"><span>${lengthText(ERR_LO)}</span><span>camera position error</span><span>${lengthText(ERR_HI)}+</span></div>
+    <p class="muted">Grey: reference cameras. The method's cameras are fitted to them with one scale, rotation and shift (${trim ? "on the best 80% of cameras" : "over all common cameras, the metric in the table"}). Errors are in the dataset's metres; the points shown stay the controller's, not this method's.</p>`;
+}
+function showMethod(id) {
+  if (state.methodGroup) { scene.remove(state.methodGroup); disposeGroup(state.methodGroup); state.methodGroup = null; }
+  const before = state.method;
+  state.method = id;
+  const mm = state.methods?.methods.find((x) => x.id === id);
+  if (mm) { buildMethodGroup(mm); frameCameras(mm); }
+  // The comparison is about cameras: hide the points and planes while a method is shown, and give
+  // them back when it is cleared (unless the reader switched them on meanwhile).
+  if (id && !before) { state.hidden = ["ly-points", "ly-planes"].filter((k) => $(k).checked); state.hidden.forEach((k) => { $(k).checked = false; }); }
+  if (!id && before) { (state.hidden ?? []).forEach((k) => { $(k).checked = true; }); state.hidden = null; }
+  applyLayers();
+  renderMethods();
+}
+const camerasShown = (mm) => ($("ly-trim").checked && mm.trimmed ? mm.trimmed.cameras : mm.cameras);
+// Keep the viewing direction, but centre on the cameras of the method and the reference and fit them in view.
+function frameCameras(mm) {
+  const pts = [...camerasShown(mm).map((c) => c.position), ...Object.values(state.methods.reference).map((r) => r.position)];
+  const lo = [0, 1, 2].map((a) => Math.min(...pts.map((p) => p[a]))), hi = [0, 1, 2].map((a) => Math.max(...pts.map((p) => p[a])));
+  const centre = new THREE.Vector3(...lo.map((l, i) => (l + hi[i]) / 2)), diag = new THREE.Vector3(...hi.map((h, i) => h - lo[i])).length();
+  const dir = camera.position.clone().sub(controls.target).normalize();
+  controls.target.copy(centre);
+  camera.position.copy(centre).addScaledVector(dir, Math.max(diag * 1.1, state.focus.diag * 0.3));
+  camera.near = Math.min(camera.near, diag / 500); camera.far = Math.max(camera.far, diag * 20); camera.updateProjectionMatrix();
+  controls.update();
+}
+function buildMethodGroup(mm) {
+  const ref = state.methods.reference, len = state.focus.diag * 0.04, g = new THREE.Group();
+  const cams = camerasShown(mm);
+  const registered = new Set(cams.map((c) => c.name));
+  const dots = (positions, colors, px, opacity = 1) => {
+    const geo = new THREE.BufferGeometry();
+    geo.setAttribute("position", new THREE.BufferAttribute(new Float32Array(positions.flat()), 3));
+    if (colors) geo.setAttribute("color", new THREE.BufferAttribute(new Float32Array(colors.flatMap((c) => [c.r, c.g, c.b])), 3));
+    const pts = new THREE.Points(geo, new THREE.PointsMaterial({ size: px, sizeAttenuation: false, vertexColors: !!colors, color: colors ? 0xffffff : 0xb8c4d0, transparent: opacity < 1, opacity, depthTest: false }));
+    pts.renderOrder = 10;
+    return pts;
+  };
+  const lines = (segments, colors, opacity = 1, color = 0xffffff) => {
+    const geo = new THREE.BufferGeometry();
+    geo.setAttribute("position", new THREE.BufferAttribute(new Float32Array(segments.flat()), 3));
+    if (colors) geo.setAttribute("color", new THREE.BufferAttribute(new Float32Array(colors.flatMap((c) => [c.r, c.g, c.b, c.r, c.g, c.b])), 3));
+    const l = new THREE.LineSegments(geo, new THREE.LineBasicMaterial({ vertexColors: !!colors, color: colors ? 0xffffff : color, transparent: opacity < 1, opacity, depthTest: false }));
+    l.renderOrder = 9;
+    return l;
+  };
+  const tick = (c) => [...c.position, ...c.position.map((v, k) => v + c.forward[k] * len)];
+  const names = Object.keys(ref);
+  const colors = cams.map((c) => errColor(c.error_m));
+  g.add(lines(cams.map((c) => [...c.position, ...ref[c.name].position]), null, 0.45, 0xffffff));
+  g.add(lines(names.map((n) => tick(ref[n])), null, 0.8, 0x8896a5));
+  g.add(dots(names.map((n) => ref[n].position), null, 5));
+  g.add(lines(cams.map(tick), colors));
+  g.add(dots(cams.map((c) => c.position), colors, 9));
+  const missing = names.filter((n) => !registered.has(n));
+  if (missing.length) g.add(dots(missing.map((n) => ref[n].position), missing.map(() => new THREE.Color("#e69f00")), 11));
+  const hard = (HARD_GROUPS[state.id] ?? []).filter((n) => ref[n]);
+  const halo = dots(hard.map((n) => ref[n].position), null, 26, 0.35);
+  halo.material.color.set(ACCENT); halo.name = "hard"; halo.renderOrder = 8;
+  g.add(halo);
+  state.methodGroup = g; scene.add(g);
 }
 
 // ---------- photos ----------
@@ -681,7 +802,8 @@ for (const side of ["a", "b"]) {
     $("modes-" + side).append(b);
   });
 }
-["ly-points", "ly-planes", "ly-cams", "ly-photos", "ly-scan"].forEach((id) => $(id).addEventListener("change", applyLayers));
+["ly-points", "ly-planes", "ly-cams", "ly-photos", "ly-scan", "ly-hard"].forEach((id) => $(id).addEventListener("change", applyLayers));
+$("ly-trim").addEventListener("change", () => { if (state.method) showMethod(state.method); });
 $("scan-align").onchange = placeScan;
 $("btn-compare").onclick = () => setCompare(!state.compare);
 $("btn-reset").onclick = resetView;

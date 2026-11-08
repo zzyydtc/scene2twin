@@ -28,7 +28,7 @@ a camera to see the model drawn over it; Compare splits the view).
 | SfM engine | COLMAP's global mapper matched the incremental mapper on `office` (0.73 against 0.74 cm camera error, about 1.8 times faster) but **failed with its defaults on `delivery_area`** (283 cm, two correct halves rotated 167 degrees against each other, with a normal-looking reprojection error); a reference-free filter that drops image pairs whose rotation loops do not close repairs it (2.1 cm, still worse than incremental's 1.44 cm). Letting the principal point be refined helped more than the engine choice: incremental 1.44 to 0.33 cm on `delivery_area`, 0.74 to 0.45 cm on `office`; the controller has it as an opt-in flag (`--refine-principal-point`) because it also flipped a gate decision on `delivery_area` (Day 8). The refined principal point lands within 4 px of the reference calibration's, while the fixed one was 13 to 17 px off |
 | Learned matching | DISK keypoints with LightGlue matches (pretrained, through `kornia`) in place of SIFT gave 38% to 57% more points but noisier ones (mean reprojection 1.5 to 2.7 times higher, median point error 11.0 against 8.4 mm on `office`) and lost 5 of 26 and 4 of 44 images, which became islands in the match graph. Camera error was no better on the images both registered (0.57 against 0.59 cm on `office`). Part of the keypoint noise is that DISK reports whole pixels of the shrunken image (Day 9) |
 | Feed-forward model | VGGT (pretrained, one pass over all images, no matching) placed the cameras in 7 to 14 s but 12.5% of the scene size off on both scenes (7.0 cm on `office`, 40.4 cm on `delivery_area`; SfM: 0.74 and 1.44 cm). As the starting point for COLMAP's triangulation and bundle adjustment it reached the incremental mapper's result on `delivery_area` (1.47 against 1.44 cm) but not on `office` (3.07 cm), and with the principal point refined produced a wrong model with a 0.38 px reprojection error there (Day 10) |
-| MASt3R-SfM | Pairwise network predictions aligned into one scene were closer than VGGT on `office` (4.55 against 7.0 cm) but failed on `delivery_area`: four images were placed about 97 degrees off the rest (217 cm overall, 0.54 px reprojection error after COLMAP refinement of a still-wrong model). The same four images defeat the learned matcher of Day 9, and SIFT links them to the rest (Day 11) |
+| MASt3R-SfM | Pairwise network predictions aligned into one scene were closer than VGGT on `office` (4.55 against 7.0 cm) but failed on `delivery_area`: four images were placed about 97 degrees off the rest (217 cm overall). Starting COLMAP from its cameras repaired the other 40 (1.35 cm, as good as SIFT's 1.29 cm on the same 40) but left those four 7 to 10 m off, at a 0.54 px reprojection error. The same four images defeat the learned matcher of Day 9, and SIFT links them to the rest (Day 11) |
 | Predicted precision | The precision a triangulation predicts for its own points is too optimistic (1.6 to 2.7 times too small, heavy tails), and COLMAP's reprojection error ranks real error barely better than a random order on one scene (Day 7) |
 
 Details, numbers and the bugs found along the way are in [`docs/`](docs/):
@@ -74,7 +74,7 @@ feedforward/   VGGT and MASt3R-SfM runners, learned-camera-initialised COLMAP re
 semantics/     structure, scene graph, SAM lifting, evaluation against the scan
 agent/         quality gates and the controller
 scripts/       baseline reconstruction, viewer export
-tests/         unit tests (82)
+tests/         unit tests (86)
 docs/          debug logs and findings
 viewer/        static Three.js viewer and its exported data (viewer/data)
 data/          local only, git-ignored (datasets, model weights)
@@ -127,16 +127,23 @@ python -m eval.compare_sfm --database outputs/office_agent/opencv/database.db \
 # engines: incremental, global, global_filtered; add --refine-principal-point to let all refine it
 
 # learned matching: build a database with DISK + LightGlue, then map it with the commands above
-python -m matching.learned --images data/eth3d/office/images/dslr_images \n    --database outputs/learned/office/database.db --max-side 3200 --max-keypoints 8192
+python -m matching.learned --images data/eth3d/office/images/dslr_images \
+    --database outputs/learned/office/database.db --max-side 3200 --max-keypoints 8192
 
 # VGGT: clone https://github.com/facebookresearch/vggt to data/third_party/vggt, download model.safetensors of
 # facebook/VGGT-1B to data/models/vggt-1b/, then run it alone and as the start for COLMAP
-python -m feedforward.vggt_run --images data/eth3d/office/images/dslr_images \n    --scene data/eth3d/office --out outputs/vggt/office
-python -m feedforward.refine --vggt outputs/vggt/office --database outputs/office_agent/opencv/database.db \n    --images data/eth3d/office/images/dslr_images --scene data/eth3d/office --out outputs/vggt/office_refined
+python -m feedforward.vggt_run --images data/eth3d/office/images/dslr_images \
+    --scene data/eth3d/office --out outputs/vggt/office
+python -m feedforward.refine --vggt outputs/vggt/office --database outputs/office_agent/opencv/database.db \
+    --images data/eth3d/office/images/dslr_images --scene data/eth3d/office --out outputs/vggt/office_refined
 
 # MASt3R-SfM: clone https://github.com/naver/mast3r (with --recursive) to data/third_party/mast3r and download
 # naver/MASt3R_ViTLarge_BaseDecoder_512_catmlpdpt_metric to data/models/mast3r-vitl-512/ (about 80 minutes on delivery_area)
-python -m feedforward.mast3r_run --images data/eth3d/office/images/dslr_images \n    --scene data/eth3d/office --out outputs/mast3r/office
+python -m feedforward.mast3r_run --images data/eth3d/office/images/dslr_images \
+    --scene data/eth3d/office --out outputs/mast3r/office
+
+# camera poses of every method above, for the viewer's method comparison (needs the model folders of Days 8 to 11)
+python -m scripts.export_methods --scene office
 
 # predicted precision against observed error
 python -m eval.run_calibration --model outputs/office_agent/opencv/best --scene data/eth3d/office \
@@ -160,6 +167,13 @@ reconstruction, and optionally the laser scan once the reconstruction has been r
   camera positions, and the photos placed in 3D at their cameras.
 - **Compare:** splits the view with a draggable divider and colours the left and right sides
   differently, from the same viewpoint (for example structure against photo colour).
+- **Reconstruction front ends compared (Days 8 to 11):** a table of the eight methods tried on the same photos
+  (SIFT with the incremental and global mappers, DISK + LightGlue, VGGT and MASt3R alone and as the start for
+  COLMAP). Picking a row draws that method's cameras against the dataset's reference cameras, coloured by position
+  error and joined to their reference positions by a line, with the points hidden. A switch fits on the best 80%
+  of cameras only, which shows where the badly placed ones went (this needs the reference poses, so it is a way
+  to look at the result, not something a method could do itself); another rings the image group that is hard for
+  most methods. Only camera poses are exported (`methods.json`, 40 to 130 KB per scene), not the methods' points.
 - **Original photos:** pick a photo, or click a camera in the 3D view. The photo opens with the
   reconstructed points drawn over it (the keypoints that were triangulated into 3D), coloured by
   structure, confidence or instance. "View from here" moves the 3D camera to the photo's pose, so

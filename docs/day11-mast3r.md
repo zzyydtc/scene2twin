@@ -35,7 +35,7 @@ Camera RMSE in cm against the reference poses, with the number of images registe
 | VGGT alone (Day 10) | 7.0 | 40.4 |
 | VGGT cameras as the start for COLMAP (Day 10) | 3.07 | 1.47 |
 | **MASt3R-SfM alone** | **4.55** | **217 (failed)** |
-| **MASt3R cameras as the start for COLMAP** | **11.39** | **197.6 (failed)** |
+| **MASt3R cameras as the start for COLMAP** | **11.39** | **197.6 (four cameras wrong, the other 40 at 1.35)** |
 
 ### `office`
 
@@ -73,13 +73,19 @@ Camera RMSE in cm against the reference poses, with the number of images registe
 - **The other 40 cameras are 41.7 cm RMS with a median rotation error of 2.4 degrees.** This subset
   was chosen afterwards, using the reference, to separate the failure from the rest; it is not a score
   a user could have obtained. It is about as good as VGGT's 40.4 cm over 44 images, and about 30 times worse than SfM.
-- **Starting COLMAP from this does not repair it** (197.6 cm, median rotation error 72 degrees; 198.1
-  cm with the principal point refined). The bundle adjustment settled in a consistent but wrong
-  model: mean reprojection error 0.54 and 0.52 px, 30,000 points, a camera error two metres.
+- **Starting COLMAP from this repairs 40 of the 44 cameras and leaves four wrong.** Over all 44 the fit
+  gives 197.6 cm and a median rotation error of 72 degrees (198.1 cm with the principal point refined),
+  but those numbers are dominated by DSC_0711 to 0714, which end up 7 to 10 m from their reference
+  positions and rotated 105 degrees. A fit on the other 40 cameras gives 1.35 cm and a median rotation
+  error of 0.11 degrees (0.37 cm with the principal point refined); the incremental SIFT model gives
+  1.29 cm on the same 40. The mean reprojection error after the refinement is 0.54 and 0.52 px with
+  30,000 points, so the four wrongly placed cameras are not visible in it. The 40-camera subset was
+  chosen after seeing the failure, using the reference. An earlier version of this page called the whole
+  refined model wrong; that read the all-camera fit, which the four cameras dominate.
 - The focal length is again close (3467.4 against 3408.6, +1.7%), and the fit scale of the 40 good
   cameras (2.19) differs from `office`'s 0.87, so the metric output is not consistent between scenes.
 - The 1,892 network passes took about 50 minutes and the alignment about 30. Points were not scored on
-  this scene. The model is wrong as a whole, and the scoring did not finish: the first run spent over an
+  this scene. The reconstruction is wrong for a group of cameras, and the scoring did not finish: the first run spent over an
   hour in the nearest-neighbour search against the scan with the sparse points, and a second run
   that subsampled them to 300,000 had not finished after more than ten minutes either. I stopped both and
   did not find the cause. The runner now also drops non-finite points and points far outside the scan's
@@ -96,6 +102,9 @@ Camera RMSE in cm against the reference poses, with the number of images registe
   of Day 9 and this one fail on them; VGGT's COLMAP-refined result has them as its four worst cameras, by 2.3 cm against a 1.5 cm median), and
   SIFT with exhaustive matching does not. Likewise the group DSC_0237 to 0241 on `office`. A group of
   frames that look at the scene from a different side is where the learned front ends are weakest here.
+- **As a start for COLMAP, MASt3R does better than its camera error suggests**: on `delivery_area` it
+  brings 40 of 44 cameras to SIFT-level accuracy, where VGGT's start brings all 44. The four it leaves
+  wrong are the four every learned front end struggled with.
 - **For these scenes the order stays SfM with SIFT first, then VGGT as a coarse start, then MASt3R-SfM.**
   Neither learned model beats SfM on accuracy, robustness or cost on this data, and SfM's output
   contains the information (verified matches, reprojection error) that a gate can check, while both
