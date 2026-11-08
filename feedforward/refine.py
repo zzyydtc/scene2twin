@@ -73,7 +73,8 @@ def refine(vggt_dir: Path, database: Path, images: Path, out: Path, refine_princ
     cam = pycolmap.Database.open(str(database))
     camera = cam.read_all_cameras()[0]
     cam.close()
-    focal = (results["focal_px"]["vggt_fx"], results["focal_px"]["vggt_fy"])
+    focal_px = results["focal_px"]
+    focal = (focal_px.get("fx", focal_px.get("vggt_fx")), focal_px.get("fy", focal_px.get("vggt_fy")))
     texts = initial_model_text(names, extrinsic, {n: i for i, n, _ in rows}, camera_ids.pop(), (camera.width, camera.height), focal)
     text_dir = out / "text"
     shutil.rmtree(text_dir, ignore_errors=True)
